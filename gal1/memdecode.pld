@@ -1,0 +1,33 @@
+GAL16V8   ; Memory decoder for Z80
+MEMDECODE ;Jaap Geurts
+
+; Memory organization:
+; first 2k = ROM
+; from 32k-40k 8KB RAM
+; IO all addresses same device
+
+;  1  2  3  4  5  6  7  8  9 10
+; 11 12 13 14 15 16 17 18 19 20
+
+CLK  /RD   /WR   /IORQ /MREQ A15 A7 A6 A5  GND
+NC   /ROMS /RAMS /CTCS /ARDS  /SIOS  NC NC NC  VCC
+
+ROMS = MREQ * /A15 * RD
+     + MREQ * /A15 * WR
+RAMS = MREQ * A15 * RD
+     + MREQ * A15 * WR
+
+; CTC at address IO 0x00
+CTCS = IORQ * RD * /A7 * /A6 * /A5
+     + IORQ * WR * /A7 * /A6 * /A5
+
+; Arduino at address IO 0x20
+ARDS = IORQ * RD * /A7 * /A6 * A5
+     + IORQ * WR * /A7 * /A6 * A5
+
+; SIO/2 at address IO 0x40
+SIOS = IORQ * RD * /A7 * A6 * /A5
+     + IORQ * WR * /A7 * A6 * /A5
+
+DESCRIPTION
+***
