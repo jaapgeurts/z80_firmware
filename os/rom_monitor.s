@@ -3,22 +3,24 @@
 ; Date: 2021-02-01
 ;
 
-;.equiv CTC_A, 0x00
-;.equiv SIO_AD, 0x40
-;.equiv SIO_BD, 0x41
-;.equiv SIO_AC, 0x42
-;.equiv SIO_BC, 0x43
-
 .equiv CTC_A, 0x00
-.equiv SIO_AC, 0x80
-.equiv SIO_AD, 0x81
+.equiv SIO_AD, 0x40
+.equiv SIO_BD, 0x41
+.equiv SIO_AC, 0x42
+.equiv SIO_BC, 0x43
+
+;.equiv CTC_A, 0x00
+;.equiv SIO_AC, 0x80
+;.equiv SIO_AD, 0x81
 
 ; constants
 .equiv STACK_TOP, 0x9FFF
+.equiv STACK_SIZE, 0x40 ; 64 bytes
 .equiv BS, 0x08 ; backspace code
 
 ;ram variables
-.equiv input_buf, 0x9000
+.equiv BUF_SIZE, 0x40 ; 64 chars
+.equiv input_buf, 0x9FFF - STACK_SIZE - BUF_SIZE
 
 
   .org 0x0000
@@ -284,6 +286,9 @@ print_newline:
   ret
 
 put_char: ; char in a
+  push af
+  call wait_serial  ; make sure we can send
+  pop af
   out (SIO_AD), a
   ret
 
@@ -336,7 +341,7 @@ init_serial:
 ; enable receive (WR3)
   ld	a, 0b00000011
   out	(SIO_AC), a
-  ld	a, 0b11000001             ; recv enable
+  ld	a, 0b11000001             ; recv enable; 8bits / char
   out	(SIO_AC), a
 
 ; write register 5
@@ -360,7 +365,7 @@ init_ctc:
 
 rom_msg:          .ascii 22,"Z80 ROM Monitor v0.1\r\n"
 author_msg:       .ascii 30,"(C) January 2021 Jaap Geurts\r\n"
-help_msg:         .ascii 28,"Commands: help, halt, load\r\n"
+help_msg:         .ascii 39,"Commands: help, halt, load, dump, run\r\n"
 halted_msg:       .ascii 13,"System halted"
 prompt_msg:       .ascii 2, "> "
 error_msg:        .ascii 26,"Error - unknown command.\r\n"
@@ -375,5 +380,4 @@ load_cmd:         .ascii 4,"load"
 dump_cmd:         .ascii 4,"dump"
 run_cmd:          .ascii 3,"run"
 
-  ;.balign 0x800
-  .balign 0x2000
+  .balign 0x800
