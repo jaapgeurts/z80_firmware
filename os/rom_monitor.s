@@ -33,11 +33,11 @@ start:
   .byte 0x08,0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
 
   .org 0x0200
-  .word  str_cmp
-  .word  read_line
-  .word  put_char
-  .word  get_char
-  .word  printk
+  .word  str_cmp   ; 0
+  .word  read_line ; 2
+  .word  put_char  ; 4
+  .word  get_char  ; 6
+  .word  printk    ; 8
 
 
 rom_entry:
@@ -353,13 +353,19 @@ init_serial:
   ret
 
 init_ctc:
+; Crystal is 3,686,400 MHz
 ; set up CTC  - 4800 baud is max achievable with 1MHz
   ld a, 0b00000101 ; control register, prescaler to 16, timer mode
   out (CTC_A), a
 ;  ld a, 26; time constant for 2400 baud, 0.16% error
-  ld a, 13; time constant for 4800 baud, 0.16% error
+;  ld a, 13; time constant for 4800 baud, 0.16% error
+  ; baudrates - Time constant
+  ; 115200    - 2
+  ; 57600     - 4
+  ; 19200     - 12
+  ; 9600      - 24
+  ld a, 1
   out (CTC_A), a
-
   ret
 
 
