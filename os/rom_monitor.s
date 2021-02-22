@@ -386,4 +386,4 @@ load_cmd:         .ascii 4,"load"
 dump_cmd:         .ascii 4,"dump"
 run_cmd:          .ascii 3,"run"
 
-  .balign 0x1000
+  .balign 0x800
