@@ -3,49 +3,96 @@
 ; Date: 2021-02-01
 ;
 
-.equiv CTC_A, 0x00
-.equiv SIO_AD, 0x40
-.equiv SIO_BD, 0x41
-.equiv SIO_AC, 0x42
-.equiv SIO_BC, 0x43
+CTC_A equ 0x00
+CTC_B equ 0x01
+CTC_C equ 0x02
+CTC_D equ 0x03
+SIO_BD equ 0x41
+SIO_BC equ 0x43
+SIO_AD equ 0x40
+SIO_AC equ 0x42
 
-;.equiv CTC_A, 0x00
-;.equiv SIO_AC, 0x80
-;.equiv SIO_AD, 0x81
+;CTC_A equ 0x00
+;SIO_AC equ 0x80
+;SIO_AD equ 0x81
 
 ; constants
-.equiv STACK_TOP, 0x9FFF
-.equiv STACK_SIZE, 0x40 ; 64 bytes
-.equiv BS, 0x08 ; backspace code
+STACK_TOP     equ 0x9FFF
+STACK_SIZE    equ 0x80 ; 128 bytes
+KEYB_BUF_SIZE equ 0x08
+BS  equ 0x08 ; backspace code
+CR  equ 0x0D
+LF  equ 0x0A
 
 ;ram variables
-.equiv BUF_SIZE, 0x40 ; 64 chars
-.equiv input_buf, 0x9FFF - STACK_SIZE - BUF_SIZE
+BUF_SIZE     equ 0x40 ; 64 chars
+readline_buf equ 0x9FFF - STACK_SIZE - BUF_SIZE
+keyb_buf     equ  readline_buf - KEYB_BUF_SIZE; // 8 bytes keyboard buf
+keyb_buf_idx equ  keyb_buf - 1
 
+SOH equ 0x01
+EOT equ 0x04
+ACK equ 0x06
+NAK equ 0x15
+ETB equ 0x17
+CAN equ 0x18
 
-  .org 0x0000
+; rst jump table
+
+  org 0x0000  ; RST 0
 
 start:
-  ld sp, STACK_TOP    ; stack pointer at 40k (base = 32k + 8k -1)
-  jp rom_entry
+  ld   sp, STACK_TOP    ; stack pointer at 40k (base = 32k + 8k -1)
+  jp   rom_entry
 
-  .byte 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
-  .byte 0x08,0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+  org 0x0008 ; RST 1 getKey
+    jp   getKey
+  org 0x0010 ; RST 2 putSerialChar
+    jp   putSerialChar
+  org 0x0018 ; RST 3 printk
+    jp   printk
+  org 0x0020 ; RST 4 readline
+    jp   readLine
+  org 0x0028 ; RST 5
+  org 0x0030 ; RST 6
 
-  .org 0x0200
-  .word  str_cmp   ; 0
-  .word  read_line ; 2
-  .word  put_char  ; 4
-  .word  get_char  ; 6
-  .word  printk    ; 8
+  org 0x0038: ; RST 7 or  Mode 1 ISR
+    push af
+    ; interrupts are already disabled
+    in   a,(SIO_AD)
+    call putKey
 
+    ; reset the interrupt
+    ;ld   a,0b00111000
+   ; out  (SIO_AC),a
+
+    pop  af
+    ei
+    reti
+
+  org 0x0066: ; NMI ISR
+    reti
+  
+  ; reserve some bytes for the interrupt handler
+  ; put jump table here.
+  org 0x0200
 
 rom_entry:
+
+  ; init variables
+  ld   a,0
+  ld   (keyb_buf_idx),a
+
 ; init ctc timer
-  call init_ctc
+  call initCtc
 
 ; init serial
-  call init_serial
+  call initSerialConsole
+
+  ;call initSerialKeyboard
+; setup interrupt
+  im 1
+  ei
 
 welcome:
   ld hl,rom_msg
@@ -54,111 +101,188 @@ welcome:
   call printk
 
 main_loop:
-  ld hl, prompt_msg     ; print the prompt
+  ld   hl, prompt_msg     ; print the prompt
   call printk
 
-  call read_line        ; read an input line
-  call print_newline
+  call readLine        ; read an input line
+  call println
 
-  ld   hl, input_buf    ; parse input
+  ld   hl, readline_buf    ; parse input
 
-  ld a, (hl)   ; if strlen(input_buf) == 0
-  cp 0
-  jr  z, main_loop
+  ld   a, (hl)   ; if strlen(input_buf) == 0
+  cp   0
+  jr   z, main_loop
 
   ld   de, help_cmd
-  call str_cmp            ; compare if help command
-  jr  nz, main_next_help
-  ld  hl, help_msg
+  call stringCompare            ; compare if help command
+  jr   nz, main_next_help
+  ld   hl, help_msg
   call printk
-  jp main_loop
+  jp   main_loop
 
 main_next_help:
 
   ld   de, halt_cmd
-  call str_cmp            ; compare if halt command
-  jr  nz, main_next_halt
-  ld  hl, halted_msg
+  call stringCompare            ; compare if halt command
+  jr   nz, main_next_halt
+  ld   hl, halted_msg
   call printk
   halt
 
 main_next_halt:
   ld   de, load_cmd
-  call str_cmp            ; compare if load command
-  jr  nz, main_next_load
-  ld  hl, loading_msg
+  call stringCompare            ; compare if load command
+  jr   nz, main_next_load
+  ld   hl, loading_msg
   call printk
   call load_program
-  ld hl, loading_done_msg
+  cp   1
+  jr   nz, ln1
+  ld   hl,error_load_msg
+  call printk 
+  jp   main_loop
+ln1:
+  cp   2
+  jr   nz, ln2
+  ld   hl,error_checksum
+  call printk 
+  jp   main_loop
+ln2:
+  ld   hl, loading_done_msg
   call printk
-  jp main_loop
+  jp   main_loop
 
 main_next_load:
   ld   de, dump_cmd
-  call str_cmp            ; compare if halt command
-  jr  nz, main_next_dump
+  call stringCompare            ; compare if halt command
+  jr   nz, main_next_dump
   ; do work
-  ld bc,80
-  ld hl,0x8000
+  ld  bc,0x80
+  ld   d,16
+  ld   hl,0x8000
 dump_loop:
-  ld a,(hl)
+  ld   a,(hl)
   call printhex
-  ld a,' '
-  call put_char
-  inc hl
-  dec bc
-  ld  a,b
-  or c
+  ld   a,' '
+  call putSerialChar
+  inc  hl
+  dec  bc
+  dec  d
+  jr   nz,skip_newl
+  ld   a, CR
+  call putSerialChar
+  ld   a, LF
+  call putSerialChar
+  ld   d,16
+skip_newl:
+  ld   a,b
+  or   c
   jr   nz, dump_loop
-  call print_newline
-  jp main_loop
+  call println
+  jp   main_loop
 
 main_next_dump:
   ld   de, run_cmd
-  call str_cmp            ; compare if halt command
+  call stringCompare            ; compare if halt command
   jr  nz, main_next_run
   call 0x8000 ; jump to loaded code
   jp main_loop
 
 main_next_run:
 main_loop_error:
-  ld hl, error_msg
+  ld   hl,error_msg
   call printk
-  jp main_loop
+  jp   main_loop
 
 panic:
-  ld hl, kernel_panic_msg
+  ld   hl, kernel_panic_msg
   call printk
   halt
 
+rts_off:
+  ld   a,005h     ;write into WR0: select WR5
+  out  (SIO_AC),A
+  ld   a,0E8h     ;DTR active, TX 8bit, BREAK off, TX on, RTS inacive
+  out  (SIO_AC),A
+  ret
+  
+rts_on:
+  ld   a,005h     ;write into WR0: select WR5
+  out  (SIO_AC),A
+  ld   a,0EAh     ;DTR active, TX 8bit, BREAK off, TX on, RTS active
+  out  (SIO_AC),A
+  ret
+
 load_program:
-  ld de, 0x8000
+  ld   hl, 0x8000
+  ld   a,NAK ; send initial nak
+  out  (SIO_AD),a
+load_program_next_block:
+  ld   b,0 
+  ld   c,0
 load_program_loop:
-  call get_char     ; get character
-  jr   z, load_program_loop  ; nothing read: read again else result in a
-  cp a, ' '
-  jr z, load_program_loop
-  cp a, '#'   ; if (a ==  '#')
-  ret z
-  ld b,a  ; store first char in b
+  call getSerialChar     ; get character
+  jr   nz, block_start
+  inc  b
+  ld   a,b
+  cp   255  ; loop in circles of 255  
+  jr   nz,load_program_loop
+  ld   b,0
+  inc  c    
+  ld   a,c
+  cp   255 ; loop 133*255 = 1s
+  jr   nz,load_program_loop
+  ld   a,NAK ; 7ms expired, send a nack
+  out  (SIO_AD),a
+  ld   c,0
+  jr   load_program_loop ; try to read again
+block_start:
+  cp   EOT   ; is it end of text
+  jr   nz, block_check_header     ; return if equal
+  ld   a,ACK 
+  out  (SIO_AD),a
+  ld   a,0
+  ret
+block_check_header:
+  cp   SOH   ; is it start of header
+  jr   nz, error_load ; error if not SOH
+  call getSerialCharWait  ; blocknumber
+;  cpl       ; invert blocknumber
+;  ld   b, a
+  call getSerialCharWait  ; 255-blocknumber
+;  cp   b ; should be the same
+;  jr   nz, error_load
+  ; load 128 bytes
+  ld   c,0 ; checksum
+  ld   b,128
+  push hl   ; save HL in case there isa retransmit
+load_program_read_data: ; start reading the data
+  call getSerialCharWait
+  ld   (hl),a         ; write data to memory 
+  inc  hl
+  ; calc the checksum
+  add  c ( a + c = char + current sum)
+  ld   c,a ; move result back in b (current sum = new sum)
+  ; compare 
+  djnz load_program_read_data ; did we read 128 bytes yet
 
-load_program_loop2:
-  call get_char     ; get character
-  jr   z, load_program_loop2  ; nothing read: read again else result in a
-  cp a, '#'   ; if (a ==  '#')
-  ret z
-  ld c, a ; store second char in c
-
-  ; b is higher order char, c is lower order char
-  call hex_to_byte ; result in a
-  ld (de), a
-  inc de ; next
-
-;  ld a,'.'      ; show dot for each byte
-;  call put_char
-  call printhex
-
-  jr load_program_loop
+  call getSerialCharWait ; get the checksum char
+  cp   c  ; does checksum match?
+  jr   nz, error_send_nak
+  ld   a,ACK ; 
+  out  (SIO_AD),a
+  inc  sp
+  inc  sp ; get rid of hl
+  jr   load_program_next_block ; next block
+error_send_nak:
+  pop  hl  ;; restore HL in case of error
+  ld   a, NAK
+  out  (SIO_AD),a
+  jr   load_program_next_block ; next block
+error_load:
+  ld   a,CAN
+  out  (SIO_AD),a
+  ret
 
 hex_to_byte: ; input bc; output a
   ;b is higher order nibble, c is lower order nibble
@@ -193,8 +317,7 @@ htb_to_next1:
   pop af
   sub '0'
   ret
-
-
+  
 printhex:
   push af
   srl a
@@ -218,7 +341,7 @@ printhex_addzero:
   ld a,b
   add '0'
 printhex_end:
-  call put_char
+  call putSerialChar
   pop bc
   ret
 
@@ -226,116 +349,200 @@ printhex_end:
 ; rom library routines
 ;********************
 
-str_cmp: ; hl = src, de = dst
-  ld b, (hl)
-  ld a, (de)
-  cp b  ; if src[0] != dst[0]  // compare length first
-  ret   nz  ; false -> not equal
-  push hl
+stringCompare: ; hl = src, de = dst
+  push bc
   push de
-   ; compare one by one
+  push hl
+  ld   b,(hl)
+  ld   a,(de)
+  ; compare one by one
 str_cmp_next:
-  inc hl
-  inc de
-  ld a,(de)
-  cp (hl)  ; if(sr[i] != src[i]) // compare bytes
-  jr nz, str_cmp_end ; false -> not equal
-  djnz str_cmp_next ; reached end?
+  ld   a,(de)
+  cp   (hl)  ; if(sr[i] != src[i]) // compare bytes
+  jr   nz, str_cmp_ne ; false -> not equal
+  inc  hl
+  inc  de
+  djnz str_cmp_next
+  ld   a,1  ; true
+  jr   str_cmp_end
+str_cmp_ne:
+  ld   a,0 ; false
 str_cmp_end:
-  pop de
-  pop hl
+  pop  bc
+  pop  de
+  pop  hl
   ret
 
-read_line: ; result in input_buf
-  ld de, input_buf+1
-  ld b,0
+readLine: ; result in input_buf
+  push bc
+  push de
+  ld   de, readline_buf+1
+  ld   b,0
 read_line_again:
-  call get_char     ; get character
-  jr   z, read_line_again  ; nothing read: read again else result in a
+  call getKeyWait     ; get character
 
-  cp a, '\r'   ; if (a ==  '\r') CR
-  jr z,read_line_end ;
-  cp a, '\n'   ; if (a ==  '\n') LF
-  jr z,read_line_end;
+  cp   CR   ; if (a ==  '\r') CR
+  jr   z,read_line_end ;
+  cp   LF   ; if (a ==  '\n') LF
+  jr   z,read_line_end;
   ; not any of the above so print and store
-  call put_char
-  cp a, BS ;  if (a == '\h') BS
-  jr nz, read_line_next
-  ld a,' '
-  call put_char
-  ld a,BS
-  call put_char
+  call putSerialChar
+  cp   BS ;  if (a == '\h') BS
+  jr   nz, read_line_next
+  ld   a,' '
+  call putSerialChar
+  ld   a,BS
+  call putSerialChar
   jr   read_line_again
 read_line_next:
-  ld (de), a    ; input_buf[b] = a
-  inc de  ; next char
-  inc b  ; increase counter
+  ld   (de), a    ; input_buf[b] = a
+  inc  de  ; next char
+  inc  b  ; increase counter
   ; TODO: check for buffer overruns
   jr   read_line_again
 read_line_end:
-  ld a,b
-  ld (input_buf), a ; input_buf[0] = b
+  ld   a,b
+  ld   (readline_buf), a ; input_buf[0] = b
+  pop  de
+  pop  bc
   ret  ; return to caller
 
-print_newline:
-; newline '\n', '\r' problem.
-  ld a,'\r'
-  call put_char
-  ld a,'\n'
-  call put_char
-  ret
-
-put_char: ; char in a
-  push af
-  call wait_serial  ; make sure we can send
-  pop af
-  out (SIO_AD), a
-  ret
-
-get_char:
-; check if character available
-  ld	a, 0b00000000 ; write to WR1. Next byte is RR0
-  out	(SIO_AC), a
-  in a, (SIO_AC)
-  bit 0, a
-  ret z  ; no char available
-; if yes, then read and return in a
-  in a,(SIO_AD)
+println:
+  ld   a,CR
+  call putSerialChar
+  ld   a,LF
+  call putSerialChar
   ret
 
 
 ; hl = source address
 printk: ; print kernel message to serial (uses pascal strings)
   push hl
-  ld b, (hl)
+  push bc
+  ld   b,(hl)
 printk_loop:
-  call wait_serial
-  inc hl
-  ld	a, (hl)
+  call waitSerialTX
+  inc  hl
+  ld   a, (hl)
   out  (SIO_AD), a
   djnz printk_loop
-  pop hl
+  pop  bc
+  pop  hl
   ret
 
-wait_serial:  ; wait for serial port to be free
-  ld	a, 0b00000000 ; write to WR1. Next byte is RR0
-  out	(SIO_AC), a
-wait_serial_again:
-  in a, (SIO_AC)
-  bit 2,a
-  jr  z, wait_serial_again
+getKey:
+  push bc
+  push hl
+  di                        ; disable interrupts
+  ld  a,(keyb_buf_idx)
+  cp  0                     ; is it empty then return
+  jr  nz, getKey_take
+  ld  a,0
+  jr getKey_end
+getKey_take:
+  dec a
+  ld  (keyb_buf_idx),a
+  ld  hl, keyb_buf
+  ld  b,0
+  ld  c,a
+  add hl,bc
+  ld  a,(hl)
+getKey_end:
+  ei
+  pop  hl
+  pop  bc
+  ret
+
+putKey:
+  push bc
+  push hl
+  push af
+  ld   a,(keyb_buf_idx)
+  ld   c,a
+  ld   a,KEYB_BUF_SIZE-1
+  cp   c                     ; is it empty then return
+  jr   nc, putKey_put
+  ld   a,0
+  jr   putKey_end
+putKey_put:
+  ld   hl, keyb_buf
+  ld   b,0
+  add  hl,bc
+  inc  c
+  ld   a,c
+  ld   (keyb_buf_idx),a
+  pop  af
+  ld   (hl),a
+  dec  sp  ; place fake af on the stack
+  dec  sp
+putKey_end:
+  pop  af
+  pop  hl
+  pop  bc
+  ret
+
+getKeyWait:
+  call getKey
+  cp   0
+  jr   z, getKeyWait
+  ret
+
+putSerialChar:
+  push af
+  call waitSerialTX  ; make sure we can send
+  pop  af
+  out  (SIO_AD), a
+  ret
+
+getSerialChar:
+; check if character available
+  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
+  out  (SIO_AC), a
+  in   a, (SIO_AC)
+  bit  0, a
+  ret  z  ; no char available
+; if yes, then read and return in a
+  in   a,(SIO_AD)
+  ret
+
+getSerialCharWait:
+; check if character available
+  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
+  out  (SIO_AC), a
+  in   a, (SIO_AC)
+  bit  0, a
+  jr   z,getSerialCharWait  ; no char available
+; if yes, then read and return in a
+  in   a,(SIO_AD)
+  ret
+
+readline:
+  ret
+
+waitSerialTX:  ; wait for serial port to be free
+  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
+  out  (SIO_AC), a
+  in   a, (SIO_AC)
+  bit  2,a
+  jr   z, waitSerialTX
   ret
 
   ; init the serial port
-init_serial:
+initSerialConsole:
 ; reset channel 0
   ld	a, 0b00110000
   out (SIO_AC), a
 
-; prepare for writing WR4
-  ld	a, 0b00000100 ; write to WR1. Next byte is WR4
+; prepare for writing WR4 - datasheet says write to WR4 first then other registers
+  ld	a, 0b00000100 ; write to WR0. Next byte is WR4
   out	(SIO_AC), a
-  ld	a, 0b00000100               ; set clock rate, No parity, 1 stopbit
+  ld	a, 0b01000100               ; 16x prescaler, No parity, 1 stopbit
+  out	(SIO_AC), a
+
+; enable interrupt on char (WR1)
+  ld	a, 0b00000001 ; 
+  out	(SIO_AC), a
+  ld	a, 0b00011000 ; int on all Rx chars
   out	(SIO_AC), a
 
 ; enable receive (WR3)
@@ -352,38 +559,40 @@ init_serial:
 
   ret
 
-init_ctc:
-; Crystal is 3,686,400 MHz
-; set up CTC  - 4800 baud is max achievable with 1MHz
-  ld a, 0b00000101 ; control register, prescaler to 16, timer mode
+initCtc:
+; clock is 3,686,400 Hz
+; clock frequency of the CTC must be 2x trigger frequency in other words:
+; input frequency on TRG0 is 1,843,200Hz (must be at least than half clock freq)
+  ld a, 0b01010101 ; control register, external trigger, counter mode, rising edge 
   out (CTC_A), a
-;  ld a, 26; time constant for 2400 baud, 0.16% error
-;  ld a, 13; time constant for 4800 baud, 0.16% error
-  ; baudrates - Time constant
-  ; 115200    - 2
-  ; 57600     - 4
-  ; 19200     - 12
-  ; 9600      - 24
-  ld a, 1
+  ; baudrates - Time constant @ 1.8432 MHz
+  ; 9600      - 12
+  ; 19200     - 6
+  ; 57600     - 2
+  ; 115200    - 1
+  ld a, 1 ; 115200 @ 1.8432 MHz
   out (CTC_A), a
   ret
 
 
-rom_msg:          .ascii 22,"Z80 ROM Monitor v0.1\r\n"
-author_msg:       .ascii 30,"(C) January 2021 Jaap Geurts\r\n"
-help_msg:         .ascii 39,"Commands: help, halt, load, dump, run\r\n"
-halted_msg:       .ascii 13,"System halted"
-prompt_msg:       .ascii 2, "> "
-error_msg:        .ascii 26,"Error - unknown command.\r\n"
-kernel_panic_msg: .ascii 12,"Kernel panic"
-loading_msg:      .ascii 99,"Load program at 0x8000. Send HEX bytes as two ASCII chars, no separators.\r\nSend # to end. Waiting: "
-loading_done_msg: .ascii 16,"\r\nLoading done\r\n"
-
+rom_msg:          ascii 22,"Z80 ROM Monitor v0.1",CR,LF
+author_msg:       ascii 30,"(C) January 2021 Jaap Geurts",CR,LF
+help_msg:         ascii 39,"Commands: help, halt, load, dump, run",CR,LF
+halted_msg:       ascii 13,"System halted"
+prompt_msg:       ascii 2, "> "
+error_msg:        ascii 26,"Error - unknown command.",CR,LF
+kernel_panic_msg: ascii 12,"Kernel panic"
+loading_msg:      ascii 49,"Load program at 0x8000. Send data using Xmodem.",CR,LF
+loading_done_msg: ascii 16,CR,LF,"Loading done",CR,LF
+error_load_msg:   ascii 20,"Error loading data",CR,LF 
+error_checksum:   ascii 10,"Checksum",CR,LF
 command_table:
-help_cmd:         .ascii 4,"help"
-halt_cmd:         .ascii 4,"halt"
-load_cmd:         .ascii 4,"load"
-dump_cmd:         .ascii 4,"dump"
-run_cmd:          .ascii 3,"run"
+help_cmd:         ascii 4,"help"
+halt_cmd:         ascii 4,"halt"
+load_cmd:         ascii 4,"load"
+dump_cmd:         ascii 4,"dump"
+run_cmd:          ascii 3,"run"
 
-  .balign 0x800
+  org 0x0800
+;  org 0x2000
+
