@@ -9,12 +9,12 @@ CTC_C equ 0x02
 CTC_D equ 0x03
 SIO_BD equ 0x41
 SIO_BC equ 0x43
-SIO_AD equ 0x40
-SIO_AC equ 0x42
+;SIO_AD equ 0x40
+;SIO_AC equ 0x42
 
 ;CTC_A equ 0x00
-;SIO_AC equ 0x80
-;SIO_AD equ 0x81
+SIO_AC equ 0x80
+SIO_AD equ 0x81
 
 ; constants
 STACK_TOP     equ 0x9FFF
@@ -39,10 +39,10 @@ CAN equ 0x18
 ;ram variables
 BUF_SIZE     equ 0x40 ; 64 chars
 readline_buf equ 0x9FFF - STACK_SIZE - BUF_SIZE
-keyb_buf     equ  readline_buf - KEYB_BUF_SIZE; // 8 bytes keyboard ring buffer
-keyb_buf_wr  equ  keyb_buf - 1 ; write index
-keyb_buf_rd  equ  keyb_buf_wr - 1 ; read index
-v_shifted    equ  keyb_buf_rd - 1 ; shift keystate
+keyb_buf     equ  readline_buf - KEYB_BUF_SIZE + 8; // 8 bytes keyboard ring buffer
+keyb_buf_wr  equ  keyb_buf - 4 ; write index
+keyb_buf_rd  equ  keyb_buf_wr - 4 ; read index
+v_shifted    equ  keyb_buf_rd - 4 ; shift keystate
 
 
 ; rst jump table
@@ -79,6 +79,7 @@ start:
     reti
 
   org 0x0066: ; NMI ISR
+    ei
     reti
   
   ; reserve some bytes for the interrupt handler
@@ -90,6 +91,8 @@ rom_entry:
   ; init variables
   ld   a,0
   ld   (keyb_buf_wr),a
+  ld   (keyb_buf_rd),a
+  ld   (v_shifted),a
 
 ; init ctc timer
   call initCtc
@@ -144,7 +147,7 @@ main_next_halt:
   jr   nz, main_next_load
   ld   hl, loading_msg
   call printk
-  call load_program
+  call loadProgram
   cp   1
   jr   nz, ln1
   ld   hl,error_load_msg
@@ -222,75 +225,79 @@ rts_on:
   out  (SIO_AC),A
   ret
 
-load_program:
+loadProgram:
+  push bc
+  push hl
   ld   hl, 0x8000
   ld   a,NAK ; send initial nak
-  out  (SIO_AD),a
-load_program_next_block:
+  call putSerialChar
+.load_program_next_block:
   ld   b,0 
   ld   c,0
-load_program_loop:
-  call getSerialChar     ; get character
-  jr   nz, block_start
+.load_program_loop:
+  call getKey     ; get character
+  jr   nz, .block_start
   inc  b
   ld   a,b
   cp   255  ; loop in circles of 255  
-  jr   nz,load_program_loop
+  jr   nz,.load_program_loop
   ld   b,0
   inc  c    
   ld   a,c
   cp   255 ; loop 133*255 = 1s
-  jr   nz,load_program_loop
+  jr   nz,.load_program_loop
   ld   a,NAK ; 7ms expired, send a nack
-  out  (SIO_AD),a
+  call putSerialChar
   ld   c,0
-  jr   load_program_loop ; try to read again
-block_start:
+  jr   .load_program_loop ; try to read again
+.block_start:
   cp   EOT   ; is it end of text
-  jr   nz, block_check_header     ; return if equal
+  jr   nz, .block_check_header     ; return if equal
   ld   a,ACK 
-  out  (SIO_AD),a
-  ld   a,0
-  ret
-block_check_header:
+  call putSerialChar
+  jr   .load_program_end
+.block_check_header:
   cp   SOH   ; is it start of header
-  jr   nz, error_load ; error if not SOH
-  call getSerialCharWait  ; blocknumber
+  jr   nz, .error_load ; error if not SOH
+  call getKeyWait  ; blocknumber
 ;  cpl       ; invert blocknumber
 ;  ld   b, a
-  call getSerialCharWait  ; 255-blocknumber
+  call getKeyWait  ; 255-blocknumber
 ;  cp   b ; should be the same
-;  jr   nz, error_load
+;  jr   nz, .error_load
   ; load 128 bytes
   ld   c,0 ; checksum
   ld   b,128
-  push hl   ; save HL in case there isa retransmit
-load_program_read_data: ; start reading the data
-  call getSerialCharWait
+  push hl   ; save HL in case there is a retransmit so we car restart from the beginning
+.load_program_read_data: ; start reading the data
+  call getKeyWait
   ld   (hl),a         ; write data to memory 
   inc  hl
   ; calc the checksum
   add  c ( a + c = char + current sum)
   ld   c,a ; move result back in b (current sum = new sum)
   ; compare 
-  djnz load_program_read_data ; did we read 128 bytes yet
+  djnz .load_program_read_data ; did we read 128 bytes yet
 
-  call getSerialCharWait ; get the checksum char
+  call getKeyWait ; get the checksum char
   cp   c  ; does checksum match?
-  jr   nz, error_send_nak
+  jr   nz, .error_send_nak ; TODO: uncomment
   ld   a,ACK ; 
-  out  (SIO_AD),a
+  call putSerialChar
   inc  sp
   inc  sp ; get rid of hl
-  jr   load_program_next_block ; next block
-error_send_nak:
+  jr   .load_program_next_block ; next block
+.error_send_nak:
   pop  hl  ;; restore HL in case of error
   ld   a, NAK
-  out  (SIO_AD),a
-  jr   load_program_next_block ; next block
-error_load:
+  call putSerialChar
+  jr   .load_program_next_block ; next block
+.error_load:
   ld   a,CAN
-  out  (SIO_AD),a
+  call putSerialChar
+.load_program_end
+  pop  hl
+  pop  bc
   ret
 
 hex_to_byte: ; input bc; output a
@@ -338,19 +345,17 @@ printhex:
   call printhex_nibble
   ret
 
-printhex_nibble:
+printhex_nibble: ; converts a nibble to hex char
   push bc
-  and 0x0f
-  ld b,a
-  sub 10
-  jr c, printhex_addzero
-  add 'A'
-  jr printhex_end
-printhex_addzero:
-  ld a,b
-  add '0'
+  push hl
+  ld   hl,hexconv_table
+  ld   b,0
+  ld   c,a
+  add  hl,bc
+  ld   a,(hl)
 printhex_end:
   call putSerialChar
+  pop hl
   pop bc
   ret
 
@@ -365,18 +370,18 @@ stringCompare: ; hl = src, de = dst
   ld   b,(hl)
   ld   a,(de)
   ; compare one by one
-str_cmp_next:
+.str_cmp_next:
   ld   a,(de)
   cp   (hl)  ; if(sr[i] != src[i]) // compare bytes
-  jr   nz, str_cmp_ne ; false -> not equal
+  jr   nz, .str_cmp_ne ; false -> not equal
   inc  hl
   inc  de
-  djnz str_cmp_next
+  djnz .str_cmp_next
   ld   a,1  ; true
-  jr   str_cmp_end
-str_cmp_ne:
+  jr   .str_cmp_end
+.str_cmp_ne:
   ld   a,0 ; false
-str_cmp_end:
+.str_cmp_end:
   pop  bc
   pop  de
   pop  hl
@@ -387,29 +392,29 @@ readLine: ; result in input_buf
   push de
   ld   de, readline_buf+1
   ld   b,0
-read_line_again:
+.read_line_again:
   call getKeyWait     ; get character
 
   cp   CR   ; if (a ==  '\r') CR
-  jr   z,read_line_end ;
+  jr   z,.read_line_end ;
   cp   LF   ; if (a ==  '\n') LF
-  jr   z,read_line_end;
+  jr   z,.read_line_end;
   ; not any of the above so print and store
   call putSerialChar
   cp   BS ;  if (a == '\h') BS
-  jr   nz, read_line_next
+  jr   nz, .read_line_next
   ld   a,' '
   call putSerialChar
   ld   a,BS
   call putSerialChar
-  jr   read_line_again
-read_line_next:
+  jr   .read_line_again
+.read_line_next:
   ld   (de), a    ; input_buf[b] = a
   inc  de  ; next char
   inc  b  ; increase counter
   ; TODO: check for buffer overruns
-  jr   read_line_again
-read_line_end:
+  jr   .read_line_again
+.read_line_end:
   ld   a,b
   ld   (readline_buf), a ; input_buf[0] = b
   pop  de
@@ -429,34 +434,39 @@ printk: ; print kernel message to serial (uses pascal strings)
   push hl
   push bc
   ld   b,(hl)
-printk_loop:
+.printk_loop:
   call waitSerialTX
   inc  hl
   ld   a, (hl)
   out  (SIO_AD), a
-  djnz printk_loop
+  djnz .printk_loop
   pop  bc
   pop  hl
+  ret
+
+
+getKeyWait:
+  call getKey
+  jr   z, getKeyWait
   ret
 
 getKey:
   push bc
   push hl
   di                        ; disable interrupts
-  ld  a,(keyb_buf_wr)
-  cp  0                     ; is it empty then return
-  jr  nz, getKey_take
-  ld  a,0
-  jr getKey_end
-getKey_take:
-  dec a
-  ld  (keyb_buf_wr),a
-  ld  hl, keyb_buf
-  ld  b,0
-  ld  c,a
-  add hl,bc
-  ld  a,(hl)
-getKey_end:
+  ld   a,(keyb_buf_wr)
+  cp   0                     ; is it empty then return
+  jr   z, .getKey_end
+.getKey_take:
+  dec  a
+  ld   (keyb_buf_wr),a
+  ld   hl, keyb_buf
+  ld   b,0
+  ld   c,a
+  add  hl,bc
+  or   1                      ; clear zero flag
+  ld   a,(hl)
+.getKey_end:
   ei
   pop  hl
   pop  bc
@@ -465,35 +475,28 @@ getKey_end:
 putKey:
   push bc
   push hl
-  push af
+  ; begin
+  push af                     ; save char for later
   ld   a,(keyb_buf_wr)
   ld   c,a
   ld   a,KEYB_BUF_SIZE-1
-  cp   c                     ; is it empty then return
-  jr   nc, putKey_put
-  ld   a,0
-  jr   putKey_end
-putKey_put:
+  cp   c                     ; is it full then return
+  jr   nc, .putKey_put
+  inc  sp
+  inc  sp ; remove af from the stack
+  jr   .putKey_end
+.putKey_put:
   ld   hl, keyb_buf
   ld   b,0
   add  hl,bc
   inc  c
   ld   a,c
-  ld   (keyb_buf_wr),a
+  ld   (keyb_buf_wr),a ; update the counter
   pop  af
-  ld   (hl),a
-  dec  sp  ; place fake af on the stack
-  dec  sp
-putKey_end:
-  pop  af
+  ld   (hl),a ; store the char
+.putKey_end:
   pop  hl
   pop  bc
-  ret
-
-getKeyWait:
-  call getKey
-  cp   0
-  jr   z, getKeyWait
   ret
 
 putSerialChar:
@@ -584,54 +587,50 @@ initCtc:
   ret
 
 readKeyboard:
-  ld   a,0
-  ld   (v_shifted),a
 
-again:
   call getKeyboardChar
   ; translate scan code
   ; ignore release codes
   cp 0xf0 ; break code
-  jr nz, make
-break:
+  jr nz, .read_kbd_make
+.read_kbd_break:
   call getKeyboardChar
   cp   L_SHIFT
-  jr   z,unshifted:
+  jr   z,.read_kbd_unshifted:
   cp   R_SHIFT
-  jr   nz,again:
-unshifted:
+  jr   nz,readKeyboard:
+.read_kbd_unshifted:
   ld   a,0
   ld   (v_shifted),a
-  jr   again
+  jr   readKeyboard
 
-make:
+.read_kbd_make:
   push af
   cp   L_SHIFT
-  jr   z,set_shifted:
+  jr   z,.read_kbd_set_shifted:
   cp   R_SHIFT
-  jr   nz,fetch:
-set_shifted:
+  jr   nz,.read_kbd_fetch:
+.read_kbd_set_shifted:
   ld   a,1
   ld   (v_shifted),a
-  jr   again
+  jr   readKeyboard
   
-fetch:
+.read_kbd_fetch:
   ld   hl,trans_table_normal
   ld   a,(v_shifted)
   cp   1
-  jr   nz,fetch_2
-  ld   hl, trans_table_shifted
-fetch_2:
+  jr   nz,.read_kbd_fetch_2
+  ld   hl,trans_table_shifted
+.read_kbd_fetch_2:
   pop  af
   ld   b, 0
   ld   c, a
   add  hl, bc
   ld   a,(hl)
 
-  call putKey
+  call putKey  ; store the key in the ring buffer
 
-next2:
-  jr   again
+  jr   readKeyboard
 
 ;; support routines
 
@@ -685,6 +684,7 @@ loading_msg:      ascii 49,"Load program at 0x8000. Send data using Xmodem.",CR,
 loading_done_msg: ascii 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   ascii 20,"Error loading data",CR,LF 
 error_checksum:   ascii 10,"Checksum",CR,LF
+hexconv_table:    ascii "0123456789ABCDEF"
 
 ; TODO: make command jump table
 command_table:
@@ -712,11 +712,11 @@ trans_table_normal:
   db  '-',0x00,0x00,0x00, "'",0x00, '[', '=' ; 50
   db 0x00,0x00,0x00,0x00,0x00, ']',0x00, "\" ; 58
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 60
-  db 0x00,0x08,0x00,'1' ,0x00, '4', '7',0x00 ; 68
+  db 0x00,0x08,0x00, '1',0x00, '4', '7',0x00 ; 68
   db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
   db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
 trans_table_shifted:
-  db  0x00,0x00,0x00,0x00,0x00,0x00 ; 0
+  db 0x00,0x00,0x00,0x00,0x00,0x00 ; 0
   db 0x00,0x00,0x00,0x00,0x00,0x0D,0x09,0x0E ; 8
   db  '~',0x00,0x00,0x00,0x00,0x00,0x00, 'Q' ; 10
   db  '!',0x00,0x00,0x00, 'Z', 'S', 'A', 'W' ; 18
@@ -729,10 +729,10 @@ trans_table_shifted:
   db  '_',0x00,0x00,0x00, '"',0x00, '{', '+' ; 50
   db 0x00,0x00,0x00,0x00,0x00, '}',0x00, '|' ; 58
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 60
-  db 0x00,0x08,0x00,'1' ,0x00, '4', '7',0x00 ; 68
+  db 0x00,0x08,0x00, '1',0x00, '4', '7',0x00 ; 68
   db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
   db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
 
-  org 0x0800
-;  org 0x2000
+;  org 0x0800
+  org 0x2000
 
