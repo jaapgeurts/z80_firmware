@@ -20,22 +20,30 @@ SIO_AC equ 0x42
 STACK_TOP     equ 0x9FFF
 STACK_SIZE    equ 0x80 ; 128 bytes
 KEYB_BUF_SIZE equ 0x08
+
+; keyboard codes 
+L_SHIFT equ 0x12
+R_SHIFT equ 0x59
+
+; char literals
+SOH equ 0x01
+EOT equ 0x04
+ACK equ 0x06
 BS  equ 0x08 ; backspace code
-CR  equ 0x0D
 LF  equ 0x0A
+CR  equ 0x0D
+NAK equ 0x15
+ETB equ 0x17
+CAN equ 0x18
 
 ;ram variables
 BUF_SIZE     equ 0x40 ; 64 chars
 readline_buf equ 0x9FFF - STACK_SIZE - BUF_SIZE
-keyb_buf     equ  readline_buf - KEYB_BUF_SIZE; // 8 bytes keyboard buf
-keyb_buf_idx equ  keyb_buf - 1
+keyb_buf     equ  readline_buf - KEYB_BUF_SIZE; // 8 bytes keyboard ring buffer
+keyb_buf_wr  equ  keyb_buf - 1 ; write index
+keyb_buf_rd  equ  keyb_buf_wr - 1 ; read index
+v_shifted    equ  keyb_buf_rd - 1 ; shift keystate
 
-SOH equ 0x01
-EOT equ 0x04
-ACK equ 0x06
-NAK equ 0x15
-ETB equ 0x17
-CAN equ 0x18
 
 ; rst jump table
 
@@ -81,7 +89,7 @@ rom_entry:
 
   ; init variables
   ld   a,0
-  ld   (keyb_buf_idx),a
+  ld   (keyb_buf_wr),a
 
 ; init ctc timer
   call initCtc
@@ -89,7 +97,8 @@ rom_entry:
 ; init serial
   call initSerialConsole
 
-  ;call initSerialKeyboard
+  call initSerialKeyboard
+
 ; setup interrupt
   im 1
   ei
@@ -434,14 +443,14 @@ getKey:
   push bc
   push hl
   di                        ; disable interrupts
-  ld  a,(keyb_buf_idx)
+  ld  a,(keyb_buf_wr)
   cp  0                     ; is it empty then return
   jr  nz, getKey_take
   ld  a,0
   jr getKey_end
 getKey_take:
   dec a
-  ld  (keyb_buf_idx),a
+  ld  (keyb_buf_wr),a
   ld  hl, keyb_buf
   ld  b,0
   ld  c,a
@@ -457,7 +466,7 @@ putKey:
   push bc
   push hl
   push af
-  ld   a,(keyb_buf_idx)
+  ld   a,(keyb_buf_wr)
   ld   c,a
   ld   a,KEYB_BUF_SIZE-1
   cp   c                     ; is it empty then return
@@ -470,7 +479,7 @@ putKey_put:
   add  hl,bc
   inc  c
   ld   a,c
-  ld   (keyb_buf_idx),a
+  ld   (keyb_buf_wr),a
   pop  af
   ld   (hl),a
   dec  sp  ; place fake af on the stack
@@ -574,6 +583,96 @@ initCtc:
   out (CTC_A), a
   ret
 
+readKeyboard:
+  ld   a,0
+  ld   (v_shifted),a
+
+again:
+  call getKeyboardChar
+  ; translate scan code
+  ; ignore release codes
+  cp 0xf0 ; break code
+  jr nz, make
+break:
+  call getKeyboardChar
+  cp   L_SHIFT
+  jr   z,unshifted:
+  cp   R_SHIFT
+  jr   nz,again:
+unshifted:
+  ld   a,0
+  ld   (v_shifted),a
+  jr   again
+
+make:
+  push af
+  cp   L_SHIFT
+  jr   z,set_shifted:
+  cp   R_SHIFT
+  jr   nz,fetch:
+set_shifted:
+  ld   a,1
+  ld   (v_shifted),a
+  jr   again
+  
+fetch:
+  ld   hl,trans_table_normal
+  ld   a,(v_shifted)
+  cp   1
+  jr   nz,fetch_2
+  ld   hl, trans_table_shifted
+fetch_2:
+  pop  af
+  ld   b, 0
+  ld   c, a
+  add  hl, bc
+  ld   a,(hl)
+
+  call putKey
+
+next2:
+  jr   again
+
+;; support routines
+
+getKeyboardChar:
+; check if character available
+  ld   a, 0b00000000 ; write to WR1. Next byte is RR0
+  out  (SIO_BC), a
+  in   a,(SIO_BC)
+  bit  0, a
+  jr   z,getKeyboardChar  ; no char available
+; if yes, then read and return in a
+  in   a,(SIO_BD)
+  ret
+
+waitSerialKbd:  ; wait for serial port to be free
+  ld	a, 0b00000000 ; write to WR1. Next byte is RR0
+  out	(SIO_BC), a
+  in a, (SIO_BC)
+  bit 2,a
+  jr  z, waitSerialKbd
+  ret
+
+  ; init the serial port
+initSerialKeyboard:
+; reset channel 1
+  ld	a, 0b00110000
+  out (SIO_BC), a
+
+; prepare for writing WR4
+  ld	a, 0b00000100 ; write to WR1. Next byte is WR4
+  out	(SIO_BC), a
+  ld	a, 0b00000101              ; set clock rate, odd parity, 1 stopbit
+  out	(SIO_BC), a
+
+; enable receive (WR3)
+  ld	a, 0b00000011
+  out	(SIO_BC), a
+  ld	a, 0b11000001             ; recv enable; 8bits/char
+  out	(SIO_BC), a
+
+  ret
 
 rom_msg:          ascii 22,"Z80 ROM Monitor v0.1",CR,LF
 author_msg:       ascii 30,"(C) January 2021 Jaap Geurts",CR,LF
@@ -586,12 +685,53 @@ loading_msg:      ascii 49,"Load program at 0x8000. Send data using Xmodem.",CR,
 loading_done_msg: ascii 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   ascii 20,"Error loading data",CR,LF 
 error_checksum:   ascii 10,"Checksum",CR,LF
+
+; TODO: make command jump table
 command_table:
 help_cmd:         ascii 4,"help"
 halt_cmd:         ascii 4,"halt"
 load_cmd:         ascii 4,"load"
 dump_cmd:         ascii 4,"dump"
 run_cmd:          ascii 3,"run"
+
+;; PS2/ scancode set 2
+
+SQOT equ 0x27
+
+trans_table_normal:
+  db 0x00,0x00,0x00,0x00,0x00,0x00 ; 0
+  db 0x00,0x00,0x00,0x00,0x00,0x0D,0x09,0x0E ; 8
+  db  '`',0x00,0x00,0x00,0x00,0x00,0x00, 'q' ; 10
+  db  '1',0x00,0x00,0x00, 'z', 's', 'a', 'w' ; 18
+  db  '2',0x00,0x00, 'c', 'x', 'd', 'e', '4' ; 20
+  db  '3',0x00,0x00, ' ', 'v', 'f', 't', 'r' ; 28
+  db  '5',0x00,0x00, 'n', 'b', 'h', 'g', 'y' ; 30
+  db  '6',0x00,0x00,0x00, 'm', 'j', 'u', '7' ; 38
+  db  '8',0x00,0x00, ',', 'k', 'i', 'o', '0' ; 40
+  db  '9',0x00,0x00, '.', '/', 'l', ';', 'p' ; 48
+  db  '-',0x00,0x00,0x00, "'",0x00, '[', '=' ; 50
+  db 0x00,0x00,0x00,0x00,0x00, ']',0x00, "\" ; 58
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 60
+  db 0x00,0x08,0x00,'1' ,0x00, '4', '7',0x00 ; 68
+  db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
+  db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
+trans_table_shifted:
+  db  0x00,0x00,0x00,0x00,0x00,0x00 ; 0
+  db 0x00,0x00,0x00,0x00,0x00,0x0D,0x09,0x0E ; 8
+  db  '~',0x00,0x00,0x00,0x00,0x00,0x00, 'Q' ; 10
+  db  '!',0x00,0x00,0x00, 'Z', 'S', 'A', 'W' ; 18
+  db  '@',0x00,0x00, 'C', 'X', 'D', 'E', '$' ; 20
+  db  '#',0x00,0x00, ' ', 'V', 'F', 'T', 'R' ; 28
+  db  '%',0x00,0x00, 'N', 'B', 'H', 'G', 'Y' ; 30
+  db  '^',0x00,0x00,0x00, 'M', 'K', 'U', '&' ; 38
+  db  '*',0x00,0x00, '<', 'K', 'I', 'O', ')' ; 40
+  db  '(',0x00,0x00, '>', '?', 'L', ':', 'P' ; 48
+  db  '_',0x00,0x00,0x00, '"',0x00, '{', '+' ; 50
+  db 0x00,0x00,0x00,0x00,0x00, '}',0x00, '|' ; 58
+  db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 60
+  db 0x00,0x08,0x00,'1' ,0x00, '4', '7',0x00 ; 68
+  db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
+  db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
 
   org 0x0800
 ;  org 0x2000
