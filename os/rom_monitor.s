@@ -9,17 +9,21 @@ CTC_C equ 0x02
 CTC_D equ 0x03
 SIO_BD equ 0x41
 SIO_BC equ 0x43
-;SIO_AD equ 0x40
-;SIO_AC equ 0x42
+SIO_AD equ 0x40
+SIO_AC equ 0x42
 
 ;CTC_A equ 0x00
-SIO_AC equ 0x80
-SIO_AD equ 0x81
+;SIO_AC equ 0x80
+;SIO_AD equ 0x81
 
 ; constants
 STACK_TOP     equ 0x9FFF
 STACK_SIZE    equ 0x80 ; 128 bytes
-KEYB_BUF_SIZE equ 0x08
+VAR_TOP       equ STACK_TOP - STACK_SIZE
+KEYB_BUF_TOP  equ 0x9F00
+KEYB_BUF_SIZE equ 0x100
+READLINE_BUF_SIZE      equ  0x40 ; 64 chars
+
 
 ; keyboard codes 
 L_SHIFT equ 0x12
@@ -36,13 +40,16 @@ NAK equ 0x15
 ETB equ 0x17
 CAN equ 0x18
 
-;ram variables
-BUF_SIZE     equ 0x40 ; 64 chars
-readline_buf equ 0x9FFF - STACK_SIZE - BUF_SIZE
-keyb_buf     equ  readline_buf - KEYB_BUF_SIZE + 8; // 8 bytes keyboard ring buffer
-keyb_buf_wr  equ  keyb_buf - 4 ; write index
-keyb_buf_rd  equ  keyb_buf_wr - 4 ; read index
-v_shifted    equ  keyb_buf_rd - 4 ; shift keystate
+;ram variables; first 128 bytes for the stack
+; next 128 bytes for general variables
+readline_buf equ VAR_TOP - READLINE_BUF_SIZE ; 64 bytes for the readline buffer
+                                    ; 64 bytes for the rest
+v_shifted    equ readline_buf - 1 ; shift keystate
+keyb_buf_wr  equ v_shifted - 2     ; write index
+keyb_buf_rd  equ keyb_buf_wr - 2  ; read index
+
+; ring buffer. Lives at 0x100 below the top
+keyb_buf     equ KEYB_BUF_TOP - KEYB_BUF_SIZE; // 8 bytes keyboard ring buffer
 
 
 ; rst jump table
@@ -54,33 +61,63 @@ start:
   jp   rom_entry
 
   org 0x0008 ; RST 1 getKey
-    jp   getKey
+  jp   getKey
   org 0x0010 ; RST 2 putSerialChar
-    jp   putSerialChar
+  jp   putSerialChar
   org 0x0018 ; RST 3 printk
-    jp   printk
+  jp   printk
   org 0x0020 ; RST 4 readline
-    jp   readLine
+  jp   readLine
   org 0x0028 ; RST 5
   org 0x0030 ; RST 6
 
   org 0x0038: ; RST 7 or  Mode 1 ISR
-    push af
-    ; interrupts are already disabled
-    in   a,(SIO_AD)
-    call putKey
+INTISR:
+  push af
+  ; interrupts are already disabled
 
-    ; reset the interrupt
-    ;ld   a,0b00111000
-   ; out  (SIO_AC),a
+  ; reset the interrupt in the SIO
+  ld   a,0b00111000
+  out  (SIO_AC),a
 
-    pop  af
-    ei
-    reti
+.intisr_check_channel_a
+  ld   a, 0b00000000 ; write to WR1. Next byte is RR0
+  out  (SIO_AC), a
+  in   a,(SIO_AC)
+  bit  0, a
+  jr   z,.intisr_check_channel_b  ; no char available
+
+  ;  if char waiting in channel a
+  in   a,(SIO_AD)
+  call putKey
+  jr   .intisr_end
+
+.intisr_check_channel_b
+
+  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
+  out  (SIO_BC), a
+  in   a,(SIO_BC)
+  bit  0, a
+  jr   z,.intisr_end  ; no char available
+  
+  ; if char waiting in channel b
+  in   a,(SIO_BD)
+  call handleKeyboard
+  ;call putKey
+  ;out  (SIO_AD),a
+
+  ; enable next char int
+  ld   a, 0b00100000 ; write to WR0. to reenable rx interrupt
+  out  (SIO_BC), a
+
+.intisr_end:
+  pop  af
+  ei
+  reti
 
   org 0x0066: ; NMI ISR
-    ei
-    reti
+  ei
+  reti
   
   ; reserve some bytes for the interrupt handler
   ; put jump table here.
@@ -89,12 +126,20 @@ start:
 rom_entry:
 
   ; init variables
+  ld   hl,keyb_buf
+  ld   (keyb_buf_wr),hl
+  ld   (keyb_buf_rd),hl
   ld   a,0
-  ld   (keyb_buf_wr),a
-  ld   (keyb_buf_rd),a
   ld   (v_shifted),a
 
 ; init ctc timer
+  ; baudrates - Time constant @ 1.8432 MHz
+  ; 9600      - 12
+  ; 19200     - 6
+  ; 57600     - 2
+  ; 115200    - 1
+  ; baudrate in a
+  ld a, 12
   call initCtc
 
 ; init serial
@@ -260,7 +305,7 @@ loadProgram:
   cp   SOH   ; is it start of header
   jr   nz, .error_load ; error if not SOH
   call getKeyWait  ; blocknumber
-;  cpl       ; invert blocknumber
+;  cpl              ; invert blocknumber
 ;  ld   b, a
   call getKeyWait  ; 255-blocknumber
 ;  cp   b ; should be the same
@@ -349,9 +394,10 @@ printhex_nibble: ; converts a nibble to hex char
   push bc
   push hl
   ld   hl,hexconv_table
+  and  0x0F ; take bottom nibble only
   ld   b,0
   ld   c,a
-  add  hl,bc
+  adc  hl,bc
   ld   a,(hl)
 printhex_end:
   call putSerialChar
@@ -406,12 +452,13 @@ readLine: ; result in input_buf
   ld   a,' '
   call putSerialChar
   ld   a,BS
+  dec  b   ; one less char in the string
   call putSerialChar
   jr   .read_line_again
 .read_line_next:
   ld   (de), a    ; input_buf[b] = a
   inc  de  ; next char
-  inc  b  ; increase counter
+  inc  b  ; one more char in the string
   ; TODO: check for buffer overruns
   jr   .read_line_again
 .read_line_end:
@@ -451,52 +498,48 @@ getKeyWait:
   ret
 
 getKey:
-  push bc
   push hl
+  push de
   di                        ; disable interrupts
-  ld   a,(keyb_buf_wr)
-  cp   0                     ; is it empty then return
-  jr   z, .getKey_end
+  ; compare if buffer is empty
+  ld   hl, (keyb_buf_wr)
+  ld   de, (keyb_buf_rd) ; read pointer
+  ld   a,l 
+  cp   e                     ; is it equal then buffer is empty
+  jr   z,.getKey_end
 .getKey_take:
-  dec  a
-  ld   (keyb_buf_wr),a
-  ld   hl, keyb_buf
-  ld   b,0
-  ld   c,a
-  add  hl,bc
-  or   1                      ; clear zero flag
-  ld   a,(hl)
+  ld   a,(de) ; read from position
+  push af
+  inc  e
+  ld  (keyb_buf_rd),de ; pointer pointer back into mem
+  pop  af
 .getKey_end:
   ei
+  pop  de
   pop  hl
-  pop  bc
   ret
 
 putKey:
-  push bc
   push hl
+  push de
+  push bc
+  ld   b,a
   ; begin
-  push af                     ; save char for later
-  ld   a,(keyb_buf_wr)
-  ld   c,a
-  ld   a,KEYB_BUF_SIZE-1
-  cp   c                     ; is it full then return
-  jr   nc, .putKey_put
-  inc  sp
-  inc  sp ; remove af from the stack
-  jr   .putKey_end
-.putKey_put:
-  ld   hl, keyb_buf
-  ld   b,0
-  add  hl,bc
-  inc  c
-  ld   a,c
-  ld   (keyb_buf_wr),a ; update the counter
-  pop  af
-  ld   (hl),a ; store the char
+  ld   hl,(keyb_buf_wr)
+  ld   de,(keyb_buf_rd)
+  dec  e
+  ld   a,l
+  cp   e
+  jr   z, .putKey_end  ; head = tail -1 => buffer full
+.putKey_put
+  ld   hl,(keyb_buf_wr)
+  ld   (hl),b
+  inc  l
+  ld   (keyb_buf_wr),hl
 .putKey_end:
-  pop  hl
   pop  bc
+  pop  de
+  pop  hl
   ret
 
 putSerialChar:
@@ -572,37 +615,42 @@ initSerialConsole:
   ret
 
 initCtc:
+  push af ; store af. it contains the baud rate time constant
 ; clock is 3,686,400 Hz
 ; clock frequency of the CTC must be 2x trigger frequency in other words:
 ; input frequency on TRG0 is 1,843,200Hz (must be at least than half clock freq)
   ld a, 0b01010101 ; control register, external trigger, counter mode, rising edge 
-  out (CTC_A), a
+  out  (CTC_A), a
   ; baudrates - Time constant @ 1.8432 MHz
   ; 9600      - 12
   ; 19200     - 6
   ; 57600     - 2
   ; 115200    - 1
-  ld a, 1 ; 115200 @ 1.8432 MHz
-  out (CTC_A), a
+  ;ld a, 1 ; 115200 @ 1.8432 MHz
+  pop  af
+  out  (CTC_A), a
   ret
 
-readKeyboard:
+; KEYBOARD FUNCTIONS
 
-  call getKeyboardChar
+handleKeyboard:
+
+  push hl
+  push bc
   ; translate scan code
   ; ignore release codes
-  cp 0xf0 ; break code
-  jr nz, .read_kbd_make
+  cp   0xf0 ; break code
+  jr   nz, .read_kbd_make
 .read_kbd_break:
-  call getKeyboardChar
+  call getKeyboardChar  ;read the next char
   cp   L_SHIFT
   jr   z,.read_kbd_unshifted:
   cp   R_SHIFT
-  jr   nz,readKeyboard:
+  jr   nz,.read_kbd_end:
 .read_kbd_unshifted:
   ld   a,0
   ld   (v_shifted),a
-  jr   readKeyboard
+  jr   .read_kbd_end
 
 .read_kbd_make:
   push af
@@ -613,7 +661,8 @@ readKeyboard:
 .read_kbd_set_shifted:
   ld   a,1
   ld   (v_shifted),a
-  jr   readKeyboard
+  pop  af
+  jr   .read_kbd_end
   
 .read_kbd_fetch:
   ld   hl,trans_table_normal
@@ -630,9 +679,12 @@ readKeyboard:
 
   call putKey  ; store the key in the ring buffer
 
-  jr   readKeyboard
+.read_kbd_end:
+  pop  bc
+  pop  hl
+  ret
 
-;; support routines
+; support routines
 
 getKeyboardChar:
 ; check if character available
@@ -645,31 +697,29 @@ getKeyboardChar:
   in   a,(SIO_BD)
   ret
 
-waitSerialKbd:  ; wait for serial port to be free
-  ld	a, 0b00000000 ; write to WR1. Next byte is RR0
-  out	(SIO_BC), a
-  in a, (SIO_BC)
-  bit 2,a
-  jr  z, waitSerialKbd
-  ret
-
   ; init the serial port
 initSerialKeyboard:
-; reset channel 1
-  ld	a, 0b00110000
-  out (SIO_BC), a
+; reset channel B
+  ld   a, 0b00110000
+  out  (SIO_BC), a
 
-; prepare for writing WR4
-  ld	a, 0b00000100 ; write to WR1. Next byte is WR4
-  out	(SIO_BC), a
-  ld	a, 0b00000101              ; set clock rate, odd parity, 1 stopbit
-  out	(SIO_BC), a
+; prepare for writing WR4, must write WR4 first
+  ld   a, 0b00000100 ; write to WR0. Next byte is WR4
+  out  (SIO_BC), a
+  ld   a, 0b00000101              ; set clock rate, odd parity, 1 stopbit
+  out  (SIO_BC), a
+
+  ; enable interrupt on char (WR1)
+  ld   a, 0b00000001 ; 
+  out  (SIO_BC), a
+  ld   a, 0b00001000 ; int on first Rx char
+  out  (SIO_BC), a
 
 ; enable receive (WR3)
-  ld	a, 0b00000011
-  out	(SIO_BC), a
-  ld	a, 0b11000001             ; recv enable; 8bits/char
-  out	(SIO_BC), a
+  ld   a, 0b00000011
+  out  (SIO_BC), a
+  ld   a, 0b11000001             ; recv enable; 8bits/char
+  out  (SIO_BC), a
 
   ret
 
@@ -733,6 +783,6 @@ trans_table_shifted:
   db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
   db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
 
-;  org 0x0800
-  org 0x2000
+  org 0x0800
+;  org 0x2000
 
