@@ -12,3 +12,5 @@ test:
 
 rtc:
 	vasm -z80asm -Fbin -o rtc.bin rtc.s
+rtcsetdate:
+	vasm -z80asm -Fbin -o rtc_setdate.bin rtc_setdate.s

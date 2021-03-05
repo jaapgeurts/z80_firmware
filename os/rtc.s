@@ -12,6 +12,25 @@ READLINE equ 0x0020 ; RST 4 readline
 
 
   org 0x8000
+  push hl
+  push bc
+
+  ld   hl, hello_msg
+  rst  PRINTK ; call printk
+
+  ld   hl,v_timestruct
+  ld   b,RTC_REG_COUNT
+  ld   c,RTC
+next:
+  ld   a,(hl)
+  out  (c),a
+  inc  c
+  inc  hl
+  djnz next
+
+  pop  bc
+  pop  hl
+  ret
 
 start:
 
@@ -32,6 +51,9 @@ again:
   add  '0'
   rst  PUTC
   djnz again
+
+  ld   hl, done_msg
+  rst  PRINTK ; call printk
 
   pop  bc
   pop  hl
@@ -122,11 +144,11 @@ RTCCheckBusy:
   pop  bc
   ret
 
-hello_msg: ascii 11,"Date test: "
-newline:   db 3,CR,LF
+hello_msg: ascii 14,"Setting date. "
+done_msg:   db 6,"Done",CR,LF
 
   org 0x8100
-v_timestruct:  db 0,0,0,4,5,1,5,0,0,3,1,2,5
+v_timestruct:  db 0,0,8,5,0,2,5,0,3,0,1,2,5
 
 
 ;; PS2/ scancode set 2
