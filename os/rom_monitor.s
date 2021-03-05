@@ -24,8 +24,8 @@ STACK_SIZE         equ 0x80 ; 128 bytes
 VAR_TOP            equ STACK_TOP - STACK_SIZE
 KEYB_BUF_TOP       equ 0x9F00
 KEYB_BUF_SIZE      equ 0x100
-READLINE_BUF_SIZE  equ  0x40 ; 64 chars
-
+READLINE_BUF_SIZE  equ 0x40 ; 64 chars
+RTC_REG_COUNT      equ 0x0d
 
 ; keyboard codes 
 L_SHIFT equ 0x12
@@ -49,6 +49,7 @@ readline_buf equ VAR_TOP - READLINE_BUF_SIZE ; 64 bytes for the readline buffer
 v_shifted    equ readline_buf - 1 ; shift keystate
 keyb_buf_wr  equ v_shifted - 2     ; write index
 keyb_buf_rd  equ keyb_buf_wr - 2  ; read index
+v_timestruct equ keyb_buf_rd - RTC_REG_COUNT ; time structure
 
 ; ring buffer. Lives at 0x100 below the top
 keyb_buf     equ KEYB_BUF_TOP - KEYB_BUF_SIZE; // 8 bytes keyboard ring buffer
@@ -123,7 +124,7 @@ INTISR:
   
   ; reserve some bytes for the interrupt handler
   ; put jump table here.
-  org 0x0200
+  org 0x0100
 
 rom_entry:
 
@@ -133,6 +134,12 @@ rom_entry:
   ld   (keyb_buf_rd),hl
   ld   a,0
   ld   (v_shifted),a
+
+  ; init realtime clock
+
+  ld   hl,rom_time
+  call RTCInit
+
 
 ; init ctc timer
   ; baudrates - Time constant @ 1.8432 MHz
@@ -192,17 +199,82 @@ main_next_date:
 
   ld   de, date_cmd
   call stringCompare            ; compare if date command
-  jr   nz, main_next_halt
-  ; code for accessing rtc
-  in   a,(RTC+1) ; second tens
-  and  0x0F ; chop off high nibble
+  jp   nz, main_next_halt
+  ; print date
+  ld   hl,v_timestruct
+  call RTCRead
+
+  ld   b,0
+  ld   c,7  ; 10 day
+  add  hl,bc
+  ld   a,(hl)
   add  '0'
   call putSerialChar
-  in   a,(RTC) ; second
-  and  0x0F ; chop off high nibble
+  dec  hl
+  ld   a,(hl) ; 1day
   add  '0'
   call putSerialChar
+  ld   a,'/'
+  call putSerialChar
+  inc  hl
+  inc  hl
+  inc  hl ; 10 month
+  ld   a,(hl)
+  add  '0'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl) ; 1 month
+  add  '0'
+  call putSerialChar
+  ld   a,'/'
+  call putSerialChar
+  inc  hl
+  inc  hl
+  inc  hl ; 10 year
+  ld   a,(hl)
+  add  '0'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl) ; 1 year
+  add  '0'
+  call putSerialChar
+  ld   a,' '
+  call putSerialChar
+
+  ld   hl,v_timestruct
+  ld   c,5
+  add  hl,bc
+  ld   a,(hl)  ; 10 hour
+  add  '0'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl)  ; 1 hour
+  add  '0'
+  call putSerialChar
+  ld   a,':'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl)  ; 10 min
+  add  '0'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl)  ; 1 min
+  add  '0'
+  call putSerialChar
+  ld   a,':'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl)  ; 10 sec
+  add  '0'
+  call putSerialChar
+  dec  hl
+  ld   a,(hl)  ; 11 sec
+  add  '0'
+  call putSerialChar
+
   call println
+
+  ; print data
   jp   main_loop
 
 main_next_halt:
@@ -427,6 +499,91 @@ printhex_end:
 ;********************
 ; rom library routines
 ;********************
+
+RTCInit:
+  push bc
+  push hl
+
+; start counting
+  ld   a,0b00000000 ; test=0, 24hr, stop=0, reset=0
+  out  (RTC+0x0f),a
+  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
+  out  (RTC+0x0d),a
+
+  call RTCCheckBusy
+
+; stop and reset
+  ld   a,0b00000001 ; reset
+  out  (RTC+0x0f),a 
+  ld   b,83 ; delay 270us @ 921MHz
+.RTCInit_delay:
+  djnz .RTCInit_delay ; decrease 100 times. takes 3cycles ecah loop = ~350ms
+  ld   a,0b00000011 ; stop + reset 
+  out  (RTC+0x0f),a
+
+; set current time
+  ld   b,RTC_REG_COUNT
+  ld   c,RTC
+.RTCInit_next:
+  ld   a,(hl)
+  out  (c),a
+  inc  c
+  inc  hl
+  djnz .RTCInit_next
+
+; start counter and release hold
+  ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
+  out  (RTC+0x0f),a
+  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
+  out  (RTC+0x0d),a
+
+  pop  hl
+  pop  bc
+  ret
+; done init
+
+RTCRead:
+
+  push bc
+  push hl
+
+  ld   b,RTC_REG_COUNT
+  ld   c,RTC
+  call RTCCheckBusy
+
+.RTCRead_loop:
+
+  in   a,(c) ;
+  and  0x0F ; chop off high nibble
+  ld   (hl),a
+  inc  c
+  inc  hl
+  djnz .RTCRead_loop
+
+; release hold
+  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
+  out  (RTC+0x0d),a
+
+  pop  hl
+  pop  bc
+  ret
+
+RTCCheckBusy:
+  push bc
+  ld   a,0b00000001  
+  out  (RTC+0x0d),a  ; set hold to 1
+  in   a,(RTC+0x0d)  ; read busy bit
+  bit  1,a
+  jr   z,.RTCCheckBusy_end
+  ld   b,65  ; still busy
+  ld   a,0b00000000
+  out  (RTC+0x0d),a ; set hold to 0
+.RTCCheckBusy_delay:
+  djnz .RTCCheckBusy_delay ; decrease 65 times. takes 3cycles each run = ~211us
+  jr   RTCCheckBusy
+.RTCCheckBusy_end:
+  pop  bc
+  ret
 
 stringCompare: ; hl = src, de = dst
   push bc
@@ -742,7 +899,7 @@ initSerialKeyboard:
 
   ret
 
-rom_msg:          ascii 22,"Z80 ROM Monitor v0.1",CR,LF
+rom_msg:          ascii 22,"Z80 ROM Monitor v0.2",CR,LF
 author_msg:       ascii 30,"(C) January 2021 Jaap Geurts",CR,LF
 help_msg:         ascii 45,"Commands: help, halt, load, dump, date, run",CR,LF
 halted_msg:       ascii 13,"System halted"
@@ -754,6 +911,7 @@ loading_done_msg: ascii 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   ascii 20,"Error loading data",CR,LF 
 error_checksum:   ascii 10,"Checksum",CR,LF
 hexconv_table:    ascii "0123456789ABCDEF"
+rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
 
 ; TODO: make command jump table
 command_table:
