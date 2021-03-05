@@ -3,10 +3,12 @@
 ; Date: 2021-02-01
 ;
 
-CTC_A equ 0x00
-CTC_B equ 0x01
-CTC_C equ 0x02
-CTC_D equ 0x03
+; IO peripheral port definitions
+CTC_A  equ 0x00
+CTC_B  equ 0x01
+CTC_C  equ 0x02
+CTC_D  equ 0x03
+RTC    equ 0x20 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
 SIO_AD equ 0x40

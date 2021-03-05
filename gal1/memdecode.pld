@@ -10,7 +10,7 @@ MEMDECODE ;Jaap Geurts
 ; 11 12 13 14 15 16 17 18 19 20
 
 CLK  /RD   /WR   /IORQ /MREQ   A15   A7 A6 A5  GND
-NC   /ROMS /RAMS /CTCS /ARDS  /SIOS  NC NC NC  VCC
+NC   /ROMS /RAMS /CTCS /RTC  /SIOS  NC NC NC  VCC
 
 ROMS = MREQ * /A15 * RD
      + MREQ * /A15 * WR
@@ -21,8 +21,8 @@ RAMS = MREQ * A15 * RD
 CTCS = IORQ * RD * /A7 * /A6 * /A5
      + IORQ * WR * /A7 * /A6 * /A5
 
-; Arduino at address IO 0x20
-ARDS = IORQ * RD * /A7 * /A6 * A5
+; Realtime Clock at address IO 0x20
+RTC = IORQ * RD * /A7 * /A6 * A5
      + IORQ * WR * /A7 * /A6 * A5
 
 ; SIO/2 at address IO 0x40
