@@ -19,12 +19,12 @@ SIO_AC equ 0x42
 ;SIO_AD equ 0x81
 
 ; constants
-STACK_TOP     equ 0x9FFF
-STACK_SIZE    equ 0x80 ; 128 bytes
-VAR_TOP       equ STACK_TOP - STACK_SIZE
-KEYB_BUF_TOP  equ 0x9F00
-KEYB_BUF_SIZE equ 0x100
-READLINE_BUF_SIZE      equ  0x40 ; 64 chars
+STACK_TOP          equ 0x9FFF
+STACK_SIZE         equ 0x80 ; 128 bytes
+VAR_TOP            equ STACK_TOP - STACK_SIZE
+KEYB_BUF_TOP       equ 0x9F00
+KEYB_BUF_SIZE      equ 0x100
+READLINE_BUF_SIZE  equ  0x40 ; 64 chars
 
 
 ; keyboard codes 
@@ -183,10 +183,27 @@ main_next_help:
 
   ld   de, halt_cmd
   call stringCompare            ; compare if halt command
-  jr   nz, main_next_halt
+  jr   nz, main_next_date
   ld   hl, halted_msg
   call printk
   halt
+
+main_next_date:
+
+  ld   de, date_cmd
+  call stringCompare            ; compare if date command
+  jr   nz, main_next_halt
+  ; code for accessing rtc
+  in   a,(RTC+1) ; second tens
+  and  0x0F ; chop off high nibble
+  add  '0'
+  call putSerialChar
+  in   a,(RTC) ; second
+  and  0x0F ; chop off high nibble
+  add  '0'
+  call putSerialChar
+  call println
+  jp   main_loop
 
 main_next_halt:
   ld   de, load_cmd
@@ -727,7 +744,7 @@ initSerialKeyboard:
 
 rom_msg:          ascii 22,"Z80 ROM Monitor v0.1",CR,LF
 author_msg:       ascii 30,"(C) January 2021 Jaap Geurts",CR,LF
-help_msg:         ascii 39,"Commands: help, halt, load, dump, run",CR,LF
+help_msg:         ascii 45,"Commands: help, halt, load, dump, date, run",CR,LF
 halted_msg:       ascii 13,"System halted"
 prompt_msg:       ascii 2, "> "
 error_msg:        ascii 26,"Error - unknown command.",CR,LF
@@ -744,6 +761,7 @@ help_cmd:         ascii 4,"help"
 halt_cmd:         ascii 4,"halt"
 load_cmd:         ascii 4,"load"
 dump_cmd:         ascii 4,"dump"
+date_cmd:         ascii 4,"date"
 run_cmd:          ascii 3,"run"
 
 ;; PS2/ scancode set 2
