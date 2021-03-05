@@ -106,12 +106,12 @@ RTCRead:
   push bc
   push hl
 
-  ld   b,RTC_REG_COUNT
-  ld   c,RTC
   call RTCCheckBusy
 
-.RTCRead_loop:
+  ld   b,RTC_REG_COUNT
+  ld   c,RTC
 
+.RTCRead_loop:
   in   a,(c) ;
   and  0x0F ; chop off high nibble
   ld   (hl),a
