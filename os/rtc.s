@@ -20,7 +20,9 @@ start:
   push bc
   push hl
 
-  jp   doread
+  jp   ReadRTC
+
+RTCInit:
 
 ; start counting
   ld   a,0b00000000 ; test=0, 24hr, stop=0, reset=0
@@ -28,14 +30,14 @@ start:
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
   out  (RTC+0x0d),a
 
-  call checkbusy
+  call RTCCheckBusy
 
 ; stop and reset
   ld   a,0b00000001 ; reset
   out  (RTC+0x0f),a 
   ld   b,83 ; delay 270us @ 921MHz
-delay:
-  djnz delay ; decrease 100 times. takes 3cycles ecah loop = ~350ms
+.RTCInit_delay:
+  djnz .RTCInit_delay ; decrease 100 times. takes 3cycles ecah loop = ~350ms
   ld   a,0b00000011 ; stop + reset 
   out  (RTC+0x0f),a
 
@@ -43,10 +45,10 @@ delay:
   ld   a,0b00000000 ; set all counts to 0
   ld   b,0x0d
   ld   c,RTC
-next:
+.RTCInit_next:
   out  (c),a
   inc  c
-  djnz next
+  djnz .RTCInit_next
 
 ; start counter and release hold
   ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
@@ -56,12 +58,12 @@ next:
 
 ; done init
 
-doread:
+ReadRTC:
   ld   b,6
   ld   c,RTC+5
-  call checkbusy
+  call RTCCheckBusy
 
-readtime:
+.ReadRTC_loop:
 
   in   a,(c) ;
 
@@ -69,7 +71,7 @@ readtime:
   add  '0'
   rst  PUTC ; call putSerialChar
   dec  c
-  djnz readtime
+  djnz .ReadRTC_loop
 
 ; release hold
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
@@ -78,25 +80,24 @@ readtime:
   ld   hl,newline
   rst  PRINTK ; call printk
 
-end:
   pop  hl
   pop  bc
   ret
 
-checkbusy:
+RTCCheckBusy:
   push bc
   ld   a,0b00000001  
   out  (RTC+0x0d),a  ; set hold to 1
   in   a,(RTC+0x0d)  ; read busy bit
   bit  1,a
-  jr   z,.checkbusy_end
+  jr   z,.RTCCheckBusy_end
   ld   b,65  ; still busy
   ld   a,0b00000000
   out  (RTC+0x0d),a ; set hold to 0
-.checkbusy_delay:
-  djnz .checkbusy_delay ; decrease 65 times. takes 3cycles each run = ~211us
-  jr   checkbusy
-.checkbusy_end:
+.RTCCheckBusy_delay:
+  djnz .RTCCheckBusy_delay ; decrease 65 times. takes 3cycles each run = ~211us
+  jr   RTCCheckBusy
+.RTCCheckBusy_end:
   pop  bc
   ret
 
