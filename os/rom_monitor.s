@@ -12,6 +12,7 @@ CTC_D  equ 0x03
 RTC    equ 0x20
 ; 16 more registers up to 0x2F
 
+
 SIO_BD equ 0x41
 SIO_BC equ 0x43
 SIO_AD equ 0x40
@@ -175,10 +176,8 @@ main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
 
-  call readLine        ; read an input line
+  call readLine        ; read an input line; result in hl
   call println
-
-  ld   hl, readline_buf    ; parse input
 
   ld   a, (hl)   ; if strlen(input_buf) == 0
   cp   0
@@ -614,7 +613,7 @@ stringCompare: ; hl = src, de = dst
   pop  hl
   ret
 
-readLine: ; result in input_buf
+readLine: ; result in input_buf & hl
   push bc
   push de
   ld   de, readline_buf+1
@@ -645,6 +644,7 @@ readLine: ; result in input_buf
 .read_line_end:
   ld   a,b
   ld   (readline_buf), a ; input_buf[0] = b
+  ld   hl,readline_buf
   pop  de
   pop  bc
   ret  ; return to caller
@@ -750,9 +750,6 @@ getSerialCharWait:
   jr   z,getSerialCharWait  ; no char available
 ; if yes, then read and return in a
   in   a,(SIO_AD)
-  ret
-
-readline:
   ret
 
 waitSerialTX:  ; wait for serial port to be free

@@ -15,8 +15,42 @@ READLINE equ 0x0020 ; RST 4 readline
   push hl
   push bc
 
-  ld   hl, hello_msg
+  ld   hl, welcome_msg
   rst  PRINTK ; call printk
+
+  rst READLINE ; result in hl
+  ; parse YYMMDD HHmmss
+  ; time struct:  s,s,m,m,H,H,D,D,M,M,Y,Y,W
+  push hl
+  pop  ix
+  inc  ix ; skip first byte (length)
+  ld   iy,v_timestruct
+  ld   a,(ix+0)
+  ld   (iy+11),a  ; 10 year digit
+  ld   a,(ix+1)
+  ld   (iy+10),a  ; 1 year digit
+  ld   a,(ix+2)
+  ld   (iy+9),a   ; 10 month
+  ld   a,(ix+3)
+  ld   (iy+8),a   ; 1 month
+  ld   a,(ix+4)
+  ld   (iy+7),a   ; 10 day
+  ld   a,(ix+5)
+  ld   (iy+6),a   ; 1 day
+  ld   a,(ix+7)
+  ld   (iy+5),a  ; 10 hour
+  ld   a,(ix+8)
+  ld   (iy+4),a  ; 1 hour
+  ld   a,(ix+9)
+  ld   (iy+3),a  ; 10 minute
+  ld   a,(ix+10)
+  ld   (iy+2),a  ; 1 minute
+  ld   a,(ix+11)
+  ld   (iy+1),a  ; 10 second
+  ld   a,(ix+12)
+  ld   (iy+0),a  ; 1 second
+
+; set actual data
 
   call RTCCheckBusy
 
@@ -33,6 +67,9 @@ next:
   ; release hold
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
   out  (RTC+0x0d),a
+
+  ld   hl, done_msg
+  rst  PRINTK ; call printk
 
   pop  bc
   pop  hl
@@ -55,9 +92,9 @@ RTCCheckBusy:
   pop  bc
   ret
 
-hello_msg: ascii 14,"Setting date. "
-done_msg:   db 6,"Done",CR,LF
+welcome_msg: ascii 34,"Set date & time: 'YYMMDD HHmmss': "
+done_msg:   db 8,CR,LF,"Done",CR,LF
 
   org 0x8100
-v_timestruct:  db 0,0,8,5,0,2,5,0,3,0,1,2,5
+v_timestruct:  db 0,0,6,1,9,0,6,0,3,0,1,2,5
 
