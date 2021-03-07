@@ -3,11 +3,14 @@
 ; Date: 2021-02-01
 ;
 
+;rc2014=1
+magnolia=1
+
 ; IO peripheral port definitions
-CTC_A  equ 0x00
-CTC_B  equ 0x01
-CTC_C  equ 0x02
-CTC_D  equ 0x03
+CTC_A equ 0x00
+CTC_B equ 0x01
+CTC_C equ 0x02
+CTC_D equ 0x03
 
 RTC    equ 0x20
 ; 16 more registers up to 0x2F
@@ -15,14 +18,18 @@ RTC    equ 0x20
 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
+  ifdef magnolia
 SIO_AD equ 0x40
 SIO_AC equ 0x42
+  endif
 
 PIO_AC equ 0x60
 
 ;CTC_A equ 0x00
-;SIO_AC equ 0x80
-;SIO_AD equ 0x81
+  ifdef rc2014
+SIO_AC equ 0x80
+SIO_AD equ 0x81
+  endif
 
 ; constants
 STACK_TOP          equ 0x9FFF
@@ -143,9 +150,10 @@ rom_entry:
 
   ; init realtime clock
 
+  ifdef magnolia
   ld   hl,rom_time
   call RTCInit
-
+  endif
 
 ; init ctc timer
   ; baudrates - Time constant @ 1.8432 MHz
@@ -172,6 +180,8 @@ welcome:
   ld hl,author_msg
   call printk
 
+; main menu loop
+; TODO: add arguments
 main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
@@ -179,31 +189,53 @@ main_loop:
   call readLine        ; read an input line; result in hl
   call println
 
-  ld   a, (hl)   ; if strlen(input_buf) == 0
+  push hl   ; put command entered into de
+  pop  de
+  ld   hl, command_table
+  ld   a,(de) ; check if user entered a command or just hit enter
   cp   0
-  jr   z, main_loop
+  jr   z,main_loop
+.search_table
+  ld   b,0
+  ld   c,(hl) ; length of command in table
+  ld   a,c
+  cp   0      ; if the last byte is a 0, then we reached end of table
+  jr   z,.cmd_notfound
+  call stringCompare
+  cp   1    ; is str equal; compare with true
+  jr   nz,.next_command ; if false do next next_command
+  ; found command. load address to jump to
+  push hl
+  pop  ix
+  inc  c
+  add  ix,bc
+  ld   h,(ix+1)
+  ld   l,(ix)
+  ld   iy,main_loop ; push return address
+  push iy
+  jp   (hl)
+.next_command:
+  inc  c
+  inc  c
+  inc  c
+  add  hl,bc
+  jr   .search_table
+.cmd_notfound
+  ld   hl,error_msg
+  call printk
+  jr   main_loop
 
-  ld   de, help_cmd
-  call stringCompare            ; compare if help command
-  jr   nz, main_next_help
+menu_help:
   ld   hl, help_msg
   call printk
-  jp   main_loop
+  ret 
 
-main_next_help:
-
-  ld   de, halt_cmd
-  call stringCompare            ; compare if halt command
-  jr   nz, main_next_date
+menu_halt:
   ld   hl, halted_msg
   call printk
   halt
 
-main_next_date:
-
-  ld   de, date_cmd
-  call stringCompare            ; compare if date command
-  jp   nz, main_next_halt
+menu_date:
   ; print date
   ld   hl,v_timestruct
   call RTCRead
@@ -278,41 +310,34 @@ main_next_date:
 
   call println
 
-  ; print data
-  jp   main_loop
+  ret
 
-main_next_halt:
-  ld   de, load_cmd
-  call stringCompare            ; compare if load command
-  jr   nz, main_next_load
+menu_load:
   ld   hl, loading_msg
   call printk
   call loadProgram
   cp   1
-  jr   nz, ln1
+  jr   nz, .ln1
   ld   hl,error_load_msg
   call printk 
-  jp   main_loop
-ln1:
+  ret
+.ln1:
   cp   2
-  jr   nz, ln2
+  jr   nz, .ln2
   ld   hl,error_checksum
   call printk 
-  jp   main_loop
-ln2:
+  ret
+.ln2:
   ld   hl, loading_done_msg
   call printk
-  jp   main_loop
+  ret
 
-main_next_load:
-  ld   de, dump_cmd
-  call stringCompare            ; compare if halt command
-  jr   nz, main_next_dump
+menu_dump:
   ; do work
-  ld  bc,0x80
+  ld   bc,0x80
   ld   d,16
   ld   hl,0x8000
-dump_loop:
+.dump_loop:
   ld   a,(hl)
   call printhex
   ld   a,' '
@@ -320,36 +345,22 @@ dump_loop:
   inc  hl
   dec  bc
   dec  d
-  jr   nz,skip_newl
+  jr   nz,.skip_newl
   ld   a, CR
   call putSerialChar
   ld   a, LF
   call putSerialChar
   ld   d,16
-skip_newl:
+.skip_newl:
   ld   a,b
   or   c
-  jr   nz, dump_loop
+  jr   nz, .dump_loop
   call println
-  jp   main_loop
+  ret
 
-main_next_dump:
-  ld   de, run_cmd
-  call stringCompare            ; compare if halt command
-  jr  nz, main_next_run
+menu_run:
   call 0x8000 ; jump to loaded code
-  jp main_loop
-
-main_next_run:
-main_loop_error:
-  ld   hl,error_msg
-  call printk
-  jp   main_loop
-
-panic:
-  ld   hl, kernel_panic_msg
-  call printk
-  halt
+  ret
 
 rts_off:
   ld   a,005h     ;write into WR0: select WR5
@@ -594,7 +605,6 @@ stringCompare: ; hl = src, de = dst
   push de
   push hl
   ld   b,(hl)
-  ld   a,(de)
   ; compare one by one
 .str_cmp_next:
   ld   a,(de)
@@ -608,9 +618,9 @@ stringCompare: ; hl = src, de = dst
 .str_cmp_ne:
   ld   a,0 ; false
 .str_cmp_end:
-  pop  bc
-  pop  de
   pop  hl
+  pop  de
+  pop  bc
   ret
 
 readLine: ; result in input_buf & hl
@@ -901,28 +911,36 @@ initSerialKeyboard:
 
   ret
 
-rom_msg:          ascii 22,"Z80 ROM Monitor v0.2",CR,LF
-author_msg:       ascii 30,"(C) January 2021 Jaap Geurts",CR,LF
-help_msg:         ascii 45,"Commands: help, halt, load, dump, date, run",CR,LF
-halted_msg:       ascii 13,"System halted"
-prompt_msg:       ascii 2, "> "
-error_msg:        ascii 26,"Error - unknown command.",CR,LF
-kernel_panic_msg: ascii 12,"Kernel panic"
-loading_msg:      ascii 49,"Load program at 0x8000. Send data using Xmodem.",CR,LF
-loading_done_msg: ascii 16,CR,LF,"Loading done",CR,LF
-error_load_msg:   ascii 20,"Error loading data",CR,LF 
-error_checksum:   ascii 10,"Checksum",CR,LF
-hexconv_table:    ascii "0123456789ABCDEF"
+rom_msg:          db 22,"Z80 ROM Monitor v0.2",CR,LF
+author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
+help_msg:         db 45,"Commands: help, halt, load, dump, date, run",CR,LF
+halted_msg:       db 13,"System halted"
+prompt_msg:       db 2, "> "
+error_msg:        db 26,"Error - unknown command.",CR,LF
+loading_msg:      db 49,"Load program at 0x8000. Send data using Xmodem.",CR,LF
+loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
+error_load_msg:   db 20,"Error loading data",CR,LF 
+error_checksum:   db 10,"Checksum",CR,LF
+hexconv_table:    db "0123456789ABCDEF"
 rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
 
-; TODO: make command jump table
+; command jump table
 command_table:
-help_cmd:         ascii 4,"help"
-halt_cmd:         ascii 4,"halt"
-load_cmd:         ascii 4,"load"
-dump_cmd:         ascii 4,"dump"
-date_cmd:         ascii 4,"date"
-run_cmd:          ascii 3,"run"
+cmd_help:    db 4,"help"
+             dw menu_help
+cmd_halt:    db 4,"halt"
+             dw menu_halt
+cmd_load:    db 4,"load"
+             dw menu_load
+cmd_dump:    db 4,"dump"
+             dw menu_dump
+cmd_date:    db 4,"date"
+             dw menu_date
+cmd_run:     db 3,"run"
+             dw menu_run
+cmd_tab_end: db    0
+
+    
 
 ;; PS2/ scancode set 2
 
@@ -963,6 +981,10 @@ trans_table_shifted:
   db 0x00,0x00, '0', '.', '2', '5', '6', '8' ; 70
   db 0x1b,0x00,0x00, '+', '3', '-', '*', '9' ; 78
 
+  ifdef magnolia
   org 0x0800
-;  org 0x2000
+  endif
+  ifdef rc2014
+  org 0x2000
+  endif
 
