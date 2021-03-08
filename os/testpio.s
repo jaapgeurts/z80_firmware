@@ -54,4 +54,4 @@ delay:
   ret
 
 
-welcome_msg: ascii 15,"PIO Test app.",CR,LF
+welcome_msg: db 15,"PIO Test app.",CR,LF
