@@ -7,15 +7,17 @@
 magnolia=1
 
 ; IO peripheral port definitions
+; CTC ports
 CTC_A equ 0x00
 CTC_B equ 0x01
 CTC_C equ 0x02
 CTC_D equ 0x03
 
+; RTC ports
 RTC    equ 0x20
 ; 16 more registers up to 0x2F
 
-
+; SIO ports 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
   ifdef magnolia
@@ -23,12 +25,19 @@ SIO_AD equ 0x40
 SIO_AC equ 0x42
   endif
 
+; PIO ports
 PIO_AC equ 0x60
 
-;CTC_A equ 0x00
+; SIO for RC2014
   ifdef rc2014
 SIO_AC equ 0x80
 SIO_AD equ 0x81
+  endif
+
+; PSG ports
+  ifdef magnolia
+PSG_REG equ 0x80
+PSG_DATA equ 0x81
   endif
 
 ; constants
@@ -304,7 +313,7 @@ menu_date:
   add  '0'
   call putSerialChar
   dec  hl
-  ld   a,(hl)  ; 11 sec
+  ld   a,(hl)  ; 1 sec
   add  '0'
   call putSerialChar
 
