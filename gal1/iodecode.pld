@@ -1,0 +1,30 @@
+GAL16V8   ; IO decoder for Z80
+IODECODE ;Jaap Geurts
+
+; Memory organization:
+; first 2k = ROM
+; from 32k-40k 8KB RAM
+; IO see below
+
+;  1  2  3  4  5  6  7  8  9 10
+; 11 12 13 14 15 16 17 18 19 20
+
+CLK  /RD /WR /IORQ /M1 A0  A5   A6 A7 GND
+NC   NC  NC  NC    NC  BC1 BDIR NC NC VCC
+
+; PSG
+; 0x80 = write reg 
+; 0x81 = write data
+; BDIR, BC1
+;    0 0 = inactive
+;    0 1 = read data
+;    1 0 = write data 
+;    1 1 = write reg (latch addr)
+
+BDIR = IORQ * WR * A7 * /A6 * /A5 * /A0 ; write data 0x80
+     + IORQ * WR * A7 * /A6 * /A5 * A0  ; write reg 0x81
+BC1 =  IORQ * RD * A7 * /A6 * /A5 * /A0 ; read data 0x80
+    +  IORQ * WR * A7 * /A6 * /A5 * A0  ; write reg 0x81
+
+DESCRIPTION
+***

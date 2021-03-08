@@ -4,7 +4,7 @@ MEMDECODE ;Jaap Geurts
 ; Memory organization:
 ; first 2k = ROM
 ; from 32k-40k 8KB RAM
-; IO all addresses same device
+; IO see below
 
 ;  1  2  3  4  5  6  7  8  9 10
 ; 11 12 13 14 15 16 17 18 19 20
