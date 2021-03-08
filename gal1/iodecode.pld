@@ -21,10 +21,10 @@ NC   NC  NC  NC    NC  BC1 BDIR NC NC VCC
 ;    1 0 = write data 
 ;    1 1 = write reg (latch addr)
 
-BDIR = IORQ * WR * A7 * /A6 * /A5 * /A0 ; write data 0x80
-     + IORQ * WR * A7 * /A6 * /A5 * A0  ; write reg 0x81
-BC1 =  IORQ * RD * A7 * /A6 * /A5 * /A0 ; read data 0x80
-    +  IORQ * WR * A7 * /A6 * /A5 * A0  ; write reg 0x81
+BDIR = IORQ * WR * A7 * /A6 * /A5 * A0 ; write data 0x81
+     + IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
+BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 ; read data 0x81
+    +  IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
 
 DESCRIPTION
 ***

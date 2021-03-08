@@ -16,3 +16,5 @@ rtcsetdate:
 	vasm -z80asm -Fbin -o rtc_setdate.bin rtc_setdate.s
 testpio:
 	vasm -z80asm -Fbin -o testpio.bin testpio.s
+testpsg:
+	vasm -z80asm -Fbin -o testpsg.bin testpsg.s
