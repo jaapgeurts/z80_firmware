@@ -17,6 +17,52 @@ READLINE equ 0x0020 ; RST 4 readline
   ld   hl, welcome_msg
   rst  PRINTK ; call printk
 
+  ;jr   flash
+
+; tp10 = 131
+; ct10 = 0
+; ft10 = 131
+PSG_FINEA   equ 0
+PSG_COARSEA equ 1
+PSG_AMPLA   equ 8
+
+PSG_FINEB   equ 2
+PSG_COARSEB equ 3
+PSG_AMPLB   equ 9
+
+PSG_FINEC   equ 4
+PSG_COARSEC equ 5
+PSG_AMPLC   equ 10
+
+PSG_ENABLE  equ 7
+
+;begin:
+
+  ld   a,PSG_FINEA          ; fine tone = @ 1.8Mhz => 262 ~ 440hz
+  out  (PSG_REG),a
+  ld   a,6
+  out  (PSG_DATA),a
+
+  ld   a,PSG_COARSEA          ; course tone = 0
+  out  (PSG_REG),a
+  ld   a,1
+  out  (PSG_DATA),a
+
+  ld   a,PSG_AMPLA          ; set volume to max
+  out  (PSG_REG),a
+  ld   a,0x0f
+  out  (PSG_DATA),a
+
+  ld   a,PSG_ENABLE          ; enable channel 
+  out  (PSG_REG),a
+  ld   a,0b00111110
+  out  (PSG_DATA),a
+
+  ;jr   begin
+  halt
+
+flash:
+
   ; set port to output
   ld   a,7
   out  (PSG_REG),a

@@ -10,7 +10,7 @@ IODECODE ;Jaap Geurts
 ; 11 12 13 14 15 16 17 18 19 20
 
 CLK  /RD /WR /IORQ /M1 A0  A5   A6 A7 GND
-NC   NC  NC  NC    NC  BC1 BDIR NC NC VCC
+NC   /TFTS TFTRS  NC    NC  BC1 BDIR NC NC VCC
 
 ; PSG
 ; 0x80 = write reg 
@@ -25,6 +25,15 @@ BDIR = IORQ * WR * A7 * /A6 * /A5 * A0 ; write data 0x81
      + IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
 BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 ; read data 0x81
     +  IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
+
+; TFT display at 0xA0
+
+;TFTS = IORQ * WR * A7 * /A6 * A5
+;     + IORQ * RD * A7 * /A6 * A5
+
+; RS high = data, low = command
+;TDTRS = IORQ * WR * A7 * /A6 * A5 * A0  ; display = 0xA0, 
+;      + IORQ * RD * A7 * /A6 * A5 * A0  ; command = 0xA1
 
 DESCRIPTION
 ***
