@@ -910,7 +910,7 @@ initSerialKeyboard:
 
   ld   a, 0b00000101
   out  (SIO_BC), a
-  ld   a, 0b10000010;   ; DTR low and RTS low
+  ld   a, 0b10000010;   ; DTR low and RTS low (results in clock and data high)
   out  (SIO_BC), a
 
   ; enable interrupt on char (WR1)

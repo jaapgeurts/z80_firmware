@@ -18,3 +18,5 @@ testpio:
 	vasm -z80asm -Fbin -o testpio.bin testpio.s
 testpsg:
 	vasm -z80asm -Fbin -o testpsg.bin testpsg.s
+testkbd:
+	vasm -z80asm -Fbin -o testkbd.bin testkbd.s
