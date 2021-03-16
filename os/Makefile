@@ -20,3 +20,6 @@ testpsg:
 	vasm -z80asm -Fbin -o testpsg.bin testpsg.s
 testkbd:
 	vasm -z80asm -Fbin -o testkbd.bin testkbd.s
+
+testtft:
+	vasm -z80asm -Fbin -o testtft.bin testtft.s

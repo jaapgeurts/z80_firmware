@@ -44,8 +44,8 @@ PSG_DATA equ 0x81
 STACK_TOP          equ 0x9FFF
 STACK_SIZE         equ 0x80 ; 128 bytes
 VAR_TOP            equ STACK_TOP - STACK_SIZE
-KEYB_BUF_TOP       equ 0x9F00
-KEYB_BUF_SIZE      equ 0x100
+SER_BUF_TOP       equ 0x9F00
+SER_BUF_SIZE      equ 0x20
 READLINE_BUF_SIZE  equ 0x40 ; 64 chars
 RTC_REG_COUNT      equ 0x0d
 
@@ -74,7 +74,7 @@ keyb_buf_rd  equ keyb_buf_wr - 2  ; read index
 v_timestruct equ keyb_buf_rd - RTC_REG_COUNT ; time structure
 
 ; ring buffer. Lives at 0x100 below the top
-keyb_buf     equ KEYB_BUF_TOP - KEYB_BUF_SIZE; // 8 bytes keyboard ring buffer
+keyb_buf     equ SER_BUF_TOP - SER_BUF_SIZE; // 32 bytes keyboard ring buffer
 
 
 ; rst jump table
@@ -697,6 +697,7 @@ getKeyWait:
   jr   z, getKeyWait
   ret
 
+; result in a, if no data available zero bit is set
 getKey:
   push hl
   push de
@@ -711,6 +712,9 @@ getKey:
   ld   a,(de) ; read from position
   push af
   inc  e
+  ld   a,e
+  and  SER_BUF_SIZE-1
+  ld   e,a
   ld  (keyb_buf_rd),de ; pointer pointer back into mem
   pop  af
 .getKey_end:
@@ -728,6 +732,9 @@ putKey:
   ld   hl,(keyb_buf_wr)
   ld   de,(keyb_buf_rd)
   dec  e
+  ld   a,e
+  and  SER_BUF_SIZE-1
+  ld   e,a
   ld   a,l
   cp   e
   jr   z, .putKey_end  ; head = tail -1 => buffer full
@@ -735,6 +742,9 @@ putKey:
   ld   hl,(keyb_buf_wr)
   ld   (hl),b
   inc  l
+  ld   a,l
+  and  SER_BUF_SIZE-1
+  ld   l,a
   ld   (keyb_buf_wr),hl
 .putKey_end:
   pop  bc
@@ -837,7 +847,7 @@ handleKeyboard:
   ; translate scan code
   ; ignore release codes
   cp   0xf0 ; break code
-  jr   nz, .read_kbd_make
+  jr   nz, .check7bit
 .read_kbd_break:
   call getKeyboardChar  ;read the next char
   cp   L_SHIFT
@@ -848,6 +858,11 @@ handleKeyboard:
   ld   a,0
   ld   (v_shifted),a
   jr   .read_kbd_end
+
+.check7bit:
+  ; if larger than 80; just store it otherwise translate
+  cp   0x80
+  jr   nc, .store
 
 .read_kbd_make:
   push af
@@ -860,7 +875,7 @@ handleKeyboard:
   ld   (v_shifted),a
   pop  af
   jr   .read_kbd_end
-  
+ 
 .read_kbd_fetch:
   ld   hl,trans_table_normal
   ld   a,(v_shifted)
@@ -874,6 +889,7 @@ handleKeyboard:
   add  hl, bc
   ld   a,(hl)
 
+.store:
   call putKey  ; store the key in the ring buffer
 
 .read_kbd_end:
@@ -974,11 +990,11 @@ trans_table_normal:
   db 0x00, ',', 'k', 'i', 'o', '0', '9',0x00 ; 40
   db 0x00, '.', '/', 'l', ';', 'p', '-',0x00 ; 48
   db 0x00,0x00, "'",0x00, '[', '=',0x00,0x00 ; 50
-  db 0x00,0x00,0x0D, ']',0x00, "\",0x00,0x00 ; 58
+  db 0x98,0x00,0x0D, ']',0x00, "\",0x00,0x00 ; 58 ; added 58=98
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00 ; 60
   db 0x00, '1',0x00, '4', '7',0x00,0x00,0x00 ; 68
-  db  '0', '.', '2', '5', '6', '8',0x1b,0x00 ; 70
-  db 0x00, '+', '3', '-', '*', '9',0x00,0x00 ; 78
+  db  '0', '.', '2', '5', '6', '8',0x1b,0xb7 ; 70 ; added 77=b7
+  db 0x00, '+', '3', '-', '*', '9',0xbe,0x00 ; 78 ; added 7e=0xbe
 trans_table_shifted:
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0   ; number at the start the array
   db 0x00,0x00,0x00,0x00,0x00,0x09, '~',0x00 ; 8
@@ -991,11 +1007,11 @@ trans_table_shifted:
   db 0x00, '<', 'M', 'I', 'O', ')', '(',0x00 ; 40
   db 0x00, '>', '?', 'L', ':', 'P', '_',0x00 ; 48
   db 0x00,0x00, '"',0x00, '{', '+',0x00,0x00 ; 50
-  db 0x00,0x00,0x0D, '}',0x00, "|",0x00,0x00 ; 58
+  db 0x98,0x00,0x0D, '}',0x00, "|",0x00,0x00 ; 58
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00 ; 60
   db 0x00, '1',0x00, '4', '7',0x00,0x00,0x00 ; 68
-  db  '0', '.', '2', '5', '6', '8',0x1b,0x00 ; 70
-  db 0x00, '+', '3', '-', '*', '9',0x00,0x00 ; 78
+  db  '0', '.', '2', '5', '6', '8',0x1b,0xb7 ; 70
+  db 0x00, '+', '3', '-', '*', '9',0xbe,0x00 ; 78
 
   ifdef magnolia
   org 0x0800

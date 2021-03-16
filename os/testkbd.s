@@ -4,19 +4,102 @@ SIO_BC equ 0x43
 CR equ 0x0D
 LF equ 0x0A
 
+v_ledstate = 0x8300
 
 GETC     equ 0x0008 ; RST 1 getKey
 PUTC     equ 0x0010 ; RST 2 putSerialChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
+KBID  equ 0xf2
+KBRST equ 0xff
+KBACK equ 0xfa
+KBLED equ 0xed
+
 
   org 0x8000
-  push hl
-  push bc
+
+  ld   hl,welcome_msg
+  rst  PRINTK
+
+  ld   a,0
+  ld   (v_ledstate),a
+
+  ld   d, KBRST ; kbdid
+  call sendKbd
+
+readAgain:
+  rst  GETC
+  jr   z, readAgain
+
+  cp   a,0x98 ; capslock (added 0x40)
+  jr   nz,.checkNum  
+  ld   d,0xed  ; set/reset leds
+  call sendKbd
+  ld   a,(v_ledstate)
+  xor  4
+  ld   (v_ledstate),a
+  ld   d,a
+  call waitAck
+  call sendKbd
+  jr   readAgain
+.checkNum
+  cp   a,0xb7 ; numlock
+  jr   nz,.checkScroll  
+  ld   d,0xed  ; set/reset leds
+  call sendKbd
+  ld   a,(v_ledstate)
+  xor  2
+  ld   (v_ledstate),a
+  ld   d,a
+  call waitAck
+  call sendKbd
+  jr   readAgain
+.checkScroll
+  cp   a,0xbe ; scrolllock
+  jr   nz,.printChar
+  ld   d,0xed  ; set/reset leds
+  call sendKbd
+  ld   a,(v_ledstate)
+  xor  1
+  ld   (v_ledstate),a
+  ; wait for ack
+  ld   d,a
+  call waitAck
+  call sendKbd
+  jr   readAgain
+.printChar
+  rst  PUTC
+  jr   readAgain
+
+ ; jr  dontwait
+
+  ld  c,2
+waitagain:
+  ld   b,200
+sleep:
+  djnz sleep
+  dec c
+  jr  nz,waitagain
+
+dontwait:
+  ld   d,0b00000110
+  call sendKbd  
+
+  pop bc
+  pop hl
+  ret
+
+waitAck:
+  ; wait for ack
+  rst  GETC
+  jr   z, waitAck
+  ; compare
+  ret
 
 
-start:
+sendKbd:
+
 ; disable receiver:
   ld   a, 0b00000011 ; wr3
   out  (SIO_BC),a
@@ -24,7 +107,7 @@ start:
   out  (SIO_BC),a
 
 ; prepare data
-  ld   a,0xFF
+  ld   a,d
   out  (SIO_BD),a
 
   ; enable transmitter
@@ -32,12 +115,23 @@ start:
   out  (SIO_BC), a
   ld   a, 0b11101010;   ; DTR low, 8bits, enable TX, RTS low
   out  (SIO_BC), a
-  
-  ; pull clock low to get keyboard to respond
-  call makelow
+
+  ; generate a pulses until the start bit appears
+.genpulse
+  ; reset external status
+  ld   a,0b00010000
+  out  (SIO_BC), a
   call makehigh
   call makelow
-  ld   b,60
+
+  ; wait for DCD to go HIGH (= clock low)
+  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
+  out  (SIO_BC), a
+  in   a, (SIO_BC)
+  bit  3,a
+  jr   z,.genpulse
+
+  ld   b,40
 .delay0:
   djnz .delay0
 
@@ -54,20 +148,18 @@ start:
   bit  0,a
   jr   z, .waitmore
 
-;enable receiver
-  ld   a, 0b00000011 ; wr3
-  out  (SIO_BC),a
-  ld   a,0b11000001 ; enable receiver
-  out  (SIO_BC),a
-
 ; disable transmitter
   ld   a, 0b00000101
   out  (SIO_BC), a
   ld   a, 0b11100010;   ; DTR low, 8bits, enable TX, RTS low
   out  (SIO_BC), a
 
-  pop bc
-  pop hl
+;enable receiver
+  ld   a, 0b00000011 ; wr3
+  out  (SIO_BC),a
+  ld   a,0b11000001 ; enable receiver
+  out  (SIO_BC),a
+
   ret
 
 
