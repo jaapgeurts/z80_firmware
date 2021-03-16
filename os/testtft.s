@@ -119,7 +119,7 @@ delay1:
    
   ld   a,0x36     ; set address mode
   out  (TFT_C),a
-  ld   a,0b00000000
+  ld   a,0b00100000
   out   (TFT_D),a
 
   ld   a,0x3A
@@ -169,9 +169,9 @@ delay2:
   out  (TFT_D),a
   ld   a,0x00
   out  (TFT_D),a
-  ld   a,0
+  ld   a,1
   out  (TFT_D),a
-  ld   a,0xff
+  ld   a,0xe0
   out  (TFT_D),a
 
   ld   a,0x2b   ; set y1,y1
@@ -180,26 +180,35 @@ delay2:
   out  (TFT_D),a
   ld   a,0x00
   out  (TFT_D),a
-  ld   a,0
+  ld   a,1
   out  (TFT_D),a
-  ld   a,0xff
+  ld   a,0x40
   out  (TFT_D),a
 
   ld   a,0x2c    ; do write
   out  (TFT_C),a
 
-  ld   b,0xff    ; = 64
-  ld   c,0xff
+  ld   d,0x03
+  ld   b,0x58    ; = 64
+  ld   c,0x00
 again:
-  ld   a,0x07
+  ld   a,0x40
   out  (TFT_D),a
-  ld   a,0xe0
+  ld   a,0xaf
   out  (TFT_D),a
   dec  bc
   ld   a,b
   cp   0
   jr   nz, again
+  dec  d
+  ld   a,d
+  cp   0
+  jr   z,end
+  ld   b,0xff
+  ld   c,0xff
+  jr   again
 
+end:
   pop  bc
   pop  hl
   ret
