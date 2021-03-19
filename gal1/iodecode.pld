@@ -9,8 +9,8 @@ IODECODE ;Jaap Geurts
 ;  1  2  3  4  5  6  7  8  9 10
 ; 11 12 13 14 15 16 17 18 19 20
 
-CLK /RD   /WR /IORQ /M1 A0  A5   A6 A7 GND
-NC  /TFTS NC  NC    NC  BC1 BDIR NC NC VCC
+CLK /RD  /WR   /IORQ /M1 A0  A5   A6 A7 GND
+NC  /CFS /TFTS NC    NC  BC1 BDIR NC NC VCC
 
 ; PSG
 ; 0x80 = write reg 
@@ -31,9 +31,9 @@ BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 ; read data 0x81
 TFTS = IORQ * WR * A7 * /A6 * A5
      + IORQ * RD * A7 * /A6 * A5
 
-; RS high = data, low = command
-;TDTRS = IORQ * WR * A7 * /A6 * A5 * A0  ; display = 0xA0, 
-;      + IORQ * RD * A7 * /A6 * A5 * A0  ; command = 0xA1
+; 
+CFS = IORQ * WR * A7 * A6 * /A5
+    + IORQ * RD * A7 * A6 * /A5
 
 DESCRIPTION
 ***

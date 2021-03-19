@@ -12,14 +12,21 @@ test:
 
 rtc:
 	vasm -z80asm -Fbin -o rtc.bin rtc.s
+
 rtcsetdate:
 	vasm -z80asm -Fbin -o rtc_setdate.bin rtc_setdate.s
+
 testpio:
 	vasm -z80asm -Fbin -o testpio.bin testpio.s
+
 testpsg:
 	vasm -z80asm -Fbin -o testpsg.bin testpsg.s
+
 testkbd:
 	vasm -z80asm -Fbin -o testkbd.bin testkbd.s
 
 testtft:
 	vasm -z80asm -Fbin -o testtft.bin testtft.s
+
+testcf:
+	vasm -z80asm -Fbin -o testcf.bin testcf.s

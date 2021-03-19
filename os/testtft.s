@@ -200,6 +200,9 @@ again:
   ld   a,b
   cp   0
   jr   nz, again
+  ld   a,c
+  cp   0
+  jr   nz, again
   dec  d
   ld   a,d
   cp   0
