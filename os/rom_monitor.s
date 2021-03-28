@@ -3,8 +3,8 @@
 ; Date: 2021-02-01
 ;
 
-;rc2014=1
-magnolia=1
+rc2014=1
+;magnolia=1
 
 ; IO peripheral port definitions
 ; CTC ports
@@ -190,7 +190,6 @@ welcome:
   call printk
 
 ; main menu loop
-; TODO: add arguments
 main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
@@ -198,15 +197,17 @@ main_loop:
   call readLine        ; read an input line; result in hl
   call println
 
-  push hl   ; put command entered into de
-  pop  de
-  ld   hl, command_table
+  ex   de,hl  ; put stringptr into de
   ld   a,(de) ; check if user entered a command or just hit enter
   cp   0
   jr   z,main_loop
+
+; get the first argument (this is the command)
+
+  ld   hl, command_table
 .search_table
-  ld   b,0
-  ld   c,(hl) ; length of command in table
+  ld   b,0    upper byte of bc
+  ld   c,(hl) ; strlength of command in table
   ld   a,c
   cp   0      ; if the last byte is a 0, then we reached end of table
   jr   z,.cmd_notfound
@@ -215,16 +216,16 @@ main_loop:
   jr   nz,.next_command ; if false do next next_command
   ; found command. load address to jump to
   push hl
-  pop  ix
+  pop  ix  ; ld  ix,hl  = start of command table
   inc  c
-  add  ix,bc
-  ld   h,(ix+1)
+  add  ix,bc  ; add count to it
+  ld   h,(ix+1) ; load func pointer
   ld   l,(ix)
   ld   iy,main_loop ; push return address
   push iy
-  jp   (hl)
+  jp   (hl)    ; jump to function pointer; hl is the start of the arg string
 .next_command:
-  inc  c
+  inc  c    ; skip three bytes (function pointer + 0)
   inc  c
   inc  c
   add  hl,bc
@@ -324,6 +325,31 @@ menu_date:
 menu_load:
   ld   hl, loading_msg
   call printk
+  
+  ; get first argument
+  call nextArgument
+  cp   0 ; no argument given.
+  jr   nz,.load_start
+  ld   hl,argerror_msg
+  call printk
+  ret
+.load_start:
+  ; parse argument 1
+  ld   a,(de)
+  ld   b,a
+  inc  de
+  ld   a,(de)
+  ld   c,a
+  call parseHexStr
+  ld   h,a
+  inc  de
+  ld   a,(de)
+  ld   b,a
+  inc  de
+  ld   a,(de)
+  ld   c,a
+  call parseHexStr
+  ld   l,a
   call loadProgram
   cp   1
   jr   nz, .ln1
@@ -341,30 +367,58 @@ menu_load:
   call printk
   ret
 
+; src address in hl
+; cmdline in de
 menu_dump:
+  push bc
+  push hl
+
+  ; get first argument
+  call nextArgument
+  cp   0 ; no argument given.
+  jr   nz,.dump_start
+  ld   hl,argerror_msg
+  call printk
+  jr   .dump_end
+  ; parse it
+  ld   a,(de)
+  ld   b,a
+  inc  de
+  ld   a,(de)
+  ld   c,a
+  call parseHexStr
+  ld   h,a
+  inc  de
+  ld   a,(de)
+  ld   b,a
+  inc  de
+  ld   a,(de)
+  ld   c,a
+  call parseHexStr
+  ld   l,a
+.dump_start
   ; do work
-  ld   bc,0x80
-  ld   d,16
-  ld   hl,0x8000
+  ld   b,0x80  ; max 127 bytes
+  ld   c,16    ; every 16 bytes a newline
 .dump_loop:
   ld   a,(hl)
   call printhex
   ld   a,' '
   call putSerialChar
   inc  hl
-  dec  bc
-  dec  d
+  dec  c
   jr   nz,.skip_newl
   ld   a, CR
   call putSerialChar
   ld   a, LF
   call putSerialChar
-  ld   d,16
+  ld   c,16
 .skip_newl:
-  ld   a,b
-  or   c
-  jr   nz, .dump_loop
+  djnz .dump_loop
   call println
+.dump_end
+  push hl
+  pop  bc
   ret
 
 menu_run:
@@ -385,10 +439,57 @@ rts_on:
   out  (SIO_AC),A
   ret
 
-loadProgram:
+; DE: str address 
+; A: total remaining length
+; destructive; splits string in substrings.
+; returns A: the remaining total length
+nextArgument:
   push bc
   push hl
-  ld   hl, 0x8000
+  push de      ; ld  hl,de
+  pop  hl
+  ld   c,0
+  ld   b,a    ; b contains total
+  ; first skip leading spaces
+.next_space
+  ld   a,b
+  cp   0    ; while we're not at the end of the string
+  jr   z,.str_found_end
+  ; move forward until we discover a letter
+  inc  hl
+  dec  b
+  ld   a,(hl)
+  cp   ' ' ; if a space
+  jr   z, .next_space ; found space
+  ld   c,1  ; a letter was found. start counting
+  push hl
+  pop  de  ; ld de,hl
+  dec  de ; de at start of string
+  ; move forward until we discover a letter
+.next_letter
+  ld   a,b
+  cp   0
+  jr   z,.str_found_end
+  ; move forward until we discover a space
+  inc  hl
+  dec  b
+  inc  c
+  ld   a,(hl)
+  cp   ' ' ; if not a space
+  jr   nz, .next_letter ; found space
+.str_found_end:
+  ld   a,c
+  ld   (de),a
+  ld   a,b ; a should contain how many letters left
+.nextarg_end:
+  pop  hl
+  pop  bc
+  ret
+  
+
+; hl contains destination address
+loadProgram:
+  push bc
   ld   a,NAK ; send initial nak
   call putSerialChar
 .load_program_next_block:
@@ -456,27 +557,32 @@ loadProgram:
   ld   a,CAN
   call putSerialChar
 .load_program_end
-  pop  hl
   pop  bc
   ret
 
-hex_to_byte: ; input bc; output a
+; parses a hex string(two values only)
+; src str in bc
+; result in a
+parseHexStr: 
+  push bc
   ;b is higher order nibble, c is lower order nibble
-  ld a,b
+  ld   a,b
   call char_to_nibble
-  ld b,a  ; put result back in b
-  ld a,c
+  ld   b,a  ; put result back in b
+  inc  hl
+  ld   a,c
   call char_to_nibble
-  ld c,a  ; put result back in c
+  ld   c,a  ; put result back in c
 
   ;b is higher order nibble, c is lower order nibble
   ; b << 4 | c
-  sla b
-  sla b
-  sla b
-  sla b
-  ld a,b  ; but b in a
-  or c ; or with c
+  sla  b
+  sla  b
+  sla  b
+  sla  b
+  ld   a,b  ; but b in a
+  or   c ; or with c
+  pop  bc
   ret
 
 char_to_nibble: ; char in a
@@ -496,12 +602,12 @@ htb_to_next1:
   
 printhex:
   push af
-  srl a
-  srl a
-  srl a
-  srl a
+  srl  a
+  srl  a
+  srl  a
+  srl  a
   call printhex_nibble
-  pop af
+  pop  af
   call printhex_nibble
   ret
 
@@ -617,7 +723,7 @@ stringCompare: ; hl = src, de = dst
   ; compare one by one
 .str_cmp_next:
   ld   a,(de)
-  cp   (hl)  ; if(sr[i] != src[i]) // compare bytes
+  cp   (hl)  ; if(src[i] != dst[i]) // compare bytes
   jr   nz, .str_cmp_ne ; false -> not equal
   inc  hl
   inc  de
@@ -644,17 +750,21 @@ readLine: ; result in input_buf & hl
   jr   z,.read_line_end ;
   cp   LF   ; if (a ==  '\n') LF
   jr   z,.read_line_end;
-  ; not any of the above so print and store
-  call putSerialChar
   cp   BS ;  if (a == '\h') BS
-  jr   nz, .read_line_next
+  jr   nz, .if_not_bs
+  ld   a,b
+  cp   0
+  jr   z,.read_line_again ; at the beginning -> do nothing
+  ld   a,BS
+  call putSerialChar
   ld   a,' '
   call putSerialChar
-  ld   a,BS
   dec  b   ; one less char in the string
+  ld   a,BS
   call putSerialChar
   jr   .read_line_again
-.read_line_next:
+.if_not_bs:
+  call putSerialChar
   ld   (de), a    ; input_buf[b] = a
   inc  de  ; next char
   inc  b  ; one more char in the string
@@ -951,7 +1061,8 @@ prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
 loading_msg:      db 49,"Load program at 0x8000. Send data using Xmodem.",CR,LF
 loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
-error_load_msg:   db 20,"Error loading data",CR,LF 
+error_load_msg:   db 20,"Error loading data",CR,LF
+argerror_msg:     db 27,"Wrong or missing argument",CR,LF
 error_checksum:   db 10,"Checksum",CR,LF
 hexconv_table:    db "0123456789ABCDEF"
 rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
@@ -1017,6 +1128,6 @@ trans_table_shifted:
   org 0x0800
   endif
   ifdef rc2014
-  org 0x2000
+  org 0x4000
   endif
 
