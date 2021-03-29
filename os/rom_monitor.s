@@ -6,6 +6,9 @@
 rc2014=1
 ;magnolia=1
 
+DUMP_ROWCOUNT    equ 0x08 ; 8 rows
+DUMP_BYTESPERROW equ 0x10 ; 16 bytes per row
+
 ; IO peripheral port definitions
 ; CTC ports
 CTC_A equ 0x00
@@ -203,6 +206,8 @@ main_loop:
   jr   z,main_loop
 
 ; get the first argument (this is the command)
+  call getArgument
+  push af ; store af; this is the remainder of the next string
 
   ld   hl, command_table
 .search_table
@@ -210,10 +215,22 @@ main_loop:
   ld   c,(hl) ; strlength of command in table
   ld   a,c
   cp   0      ; if the last byte is a 0, then we reached end of table
-  jr   z,.cmd_notfound
+  jr   nz,.search_compare
+  inc  sp
+  inc  sp ; restore the stack
+  ld   hl,error_msg
+  call printk
+  jr   main_loop
+.search_compare:
   call stringCompare
   cp   1    ; is str equal; compare with true
-  jr   nz,.next_command ; if false do next next_command
+  jr   z,.exec_command ; if true do execute command
+  inc  c    ; skip three bytes (function pointer + 0)
+  inc  c
+  inc  c
+  add  hl,bc
+  jr   .search_table
+.exec_command:
   ; found command. load address to jump to
   push hl
   pop  ix  ; ld  ix,hl  = start of command table
@@ -222,18 +239,10 @@ main_loop:
   ld   h,(ix+1) ; load func pointer
   ld   l,(ix)
   ld   iy,main_loop ; push return address
+  pop  af
   push iy
   jp   (hl)    ; jump to function pointer; hl is the start of the arg string
-.next_command:
-  inc  c    ; skip three bytes (function pointer + 0)
-  inc  c
-  inc  c
-  add  hl,bc
-  jr   .search_table
-.cmd_notfound
-  ld   hl,error_msg
-  call printk
-  jr   main_loop
+
 
 menu_help:
   ld   hl, help_msg
@@ -323,34 +332,20 @@ menu_date:
   ret
 
 menu_load:
+  call getAddress
+  ret  z   ; result in hl, str in de
+
+  push hl
   ld   hl, loading_msg
   call printk
-  
-  ; get first argument
-  call nextArgument
-  cp   0 ; no argument given.
-  jr   nz,.load_start
-  ld   hl,argerror_msg
+  pop  hl
+
+  ex   de,hl
   call printk
-  ret
-.load_start:
-  ; parse argument 1
-  ld   a,(de)
-  ld   b,a
-  inc  de
-  ld   a,(de)
-  ld   c,a
-  call parseHexStr
-  ld   h,a
-  inc  de
-  ld   a,(de)
-  ld   b,a
-  inc  de
-  ld   a,(de)
-  ld   c,a
-  call parseHexStr
-  ld   l,a
-  call loadProgram
+  ex   de,hl
+  call println
+  
+  call loadProgram  ; do actual work
   cp   1
   jr   nz, .ln1
   ld   hl,error_load_msg
@@ -373,13 +368,89 @@ menu_dump:
   push bc
   push hl
 
-  ; get first argument
-  call nextArgument
+  call getAddress
+  jr   z, .dump_end
+
+  ; do work
+  ld   c,DUMP_ROWCOUNT    ; 8 rows maximum
+.dump_row:
+  ld   b,DUMP_BYTESPERROW    ; 16 bytes per row
+  ; print address
+  ld   a,'0'
+  call putSerialChar
+  ld   a,'x'
+  call putSerialChar
+  push hl
+  ld   a,h
+  call printhex
+  ld   a,l
+  call printhex
+  pop  hl
+  push hl
+.dump_hex_val:
+  ; print value as hex duplets
+  ld   a,' '
+  call putSerialChar
+  ld   a,(hl)
+  call printhex
+  inc  hl
+  djnz .dump_hex_val
+  ld   a,' '
+  call putSerialChar
+  ld   b,DUMP_BYTESPERROW  
+  pop  hl
+.dump_ascii_val:
+  ld   a,(hl)
+  cp   32
+  jr   nc, .printable
+  ld   a,'.'
+.printable
+  call putSerialChar
+  inc  hl
+  djnz .dump_ascii_val
+  call println
+  dec  c
+  jr   nz,.dump_row
+.dump_end:
+  pop  hl
+  pop  bc
+  ret
+
+menu_run:
+  call getAddress
+  ret  z   ; result in hl, str in de
+
+  jp    (hl); jump to loaded code with will return
+
+
+; parses an address string into hl
+; input: DE : string
+; returns address in HL
+getAddress:
   cp   0 ; no argument given.
-  jr   nz,.dump_start
+  jr   nz,.getarg
   ld   hl,argerror_msg
   call printk
-  jr   .dump_end
+  cp   a ; set zero flag
+  ret
+
+.getarg:
+  call nextArgument
+  ld   a,(de)
+  cp   0 ; no argument given.
+  jr   nz,.getadr_start
+  ld   hl,argerror_msg
+  call printk
+  cp   a ; set zero flag
+  ret
+
+.getadr_start:
+    ; get first argument
+  call getArgument
+
+  push bc
+  push de
+  inc de
   ; parse it
   ld   a,(de)
   ld   b,a
@@ -396,34 +467,15 @@ menu_dump:
   ld   c,a
   call parseHexStr
   ld   l,a
-.dump_start
-  ; do work
-  ld   b,0x80  ; max 127 bytes
-  ld   c,16    ; every 16 bytes a newline
-.dump_loop:
-  ld   a,(hl)
-  call printhex
-  ld   a,' '
-  call putSerialChar
-  inc  hl
-  dec  c
-  jr   nz,.skip_newl
-  ld   a, CR
-  call putSerialChar
-  ld   a, LF
-  call putSerialChar
-  ld   c,16
-.skip_newl:
-  djnz .dump_loop
-  call println
-.dump_end
-  push hl
+  pop  de
   pop  bc
+  or   1; reset zero flag
   ret
 
-menu_run:
-  call 0x8000 ; jump to loaded code
-  ret
+
+; ****************
+; ***
+; ****************
 
 rts_off:
   ld   a,005h     ;write into WR0: select WR5
@@ -438,54 +490,6 @@ rts_on:
   ld   a,0EAh     ;DTR active, TX 8bit, BREAK off, TX on, RTS active
   out  (SIO_AC),A
   ret
-
-; DE: str address 
-; A: total remaining length
-; destructive; splits string in substrings.
-; returns A: the remaining total length
-nextArgument:
-  push bc
-  push hl
-  push de      ; ld  hl,de
-  pop  hl
-  ld   c,0
-  ld   b,a    ; b contains total
-  ; first skip leading spaces
-.next_space
-  ld   a,b
-  cp   0    ; while we're not at the end of the string
-  jr   z,.str_found_end
-  ; move forward until we discover a letter
-  inc  hl
-  dec  b
-  ld   a,(hl)
-  cp   ' ' ; if a space
-  jr   z, .next_space ; found space
-  ld   c,1  ; a letter was found. start counting
-  push hl
-  pop  de  ; ld de,hl
-  dec  de ; de at start of string
-  ; move forward until we discover a letter
-.next_letter
-  ld   a,b
-  cp   0
-  jr   z,.str_found_end
-  ; move forward until we discover a space
-  inc  hl
-  dec  b
-  inc  c
-  ld   a,(hl)
-  cp   ' ' ; if not a space
-  jr   nz, .next_letter ; found space
-.str_found_end:
-  ld   a,c
-  ld   (de),a
-  ld   a,b ; a should contain how many letters left
-.nextarg_end:
-  pop  hl
-  pop  bc
-  ret
-  
 
 ; hl contains destination address
 loadProgram:
@@ -560,6 +564,12 @@ loadProgram:
   pop  bc
   ret
 
+
+;********************
+; rom library routines
+;********************
+
+
 ; parses a hex string(two values only)
 ; src str in bc
 ; result in a
@@ -626,10 +636,71 @@ printhex_end:
   pop bc
   ret
 
-;********************
-; rom library routines
-;********************
 
+nextArgument:
+; advance the string ptr the end of the string.
+  push af
+  push bc
+  ld   b,0
+  ld   a,(de)
+  inc  a
+  ld   c,a
+  ex   de,hl
+  add  hl,bc
+  ex   de,hl
+  pop  bc
+  pop  af
+  ret
+
+; returns the first word in a string that's marked by spaces on either side
+; DE: str address 
+; A: total remaining length
+; destructive; splits string in substrings.
+; returns A: the remaining total length
+getArgument:
+  push bc
+  push hl
+  push de      ; ld  hl,de
+  pop  hl
+  ld   c,0
+  ld   b,a    ; b contains total
+  ; first skip leading spaces
+.next_space
+  ld   a,b
+  cp   0    ; while we're not at the end of the string
+  jr   z,.str_found_end
+  ; move forward until we discover a letter
+  inc  hl
+  dec  b
+  ld   a,(hl)
+  cp   ' ' ; if a space
+  jr   z, .next_space ; found space
+  ld   c,1  ; a letter was found. start counting
+  push hl
+  pop  de  ; ld de,hl
+  dec  de ; de at start of string
+  ; move forward until we discover a letter
+.next_letter
+  ld   a,b
+  cp   0
+  jr   z,.str_found_end
+  ; move forward until we discover a space
+  inc  hl
+  dec  b
+  inc  c
+  ld   a,(hl)
+  cp   ' ' ; if not a space
+  jr   nz, .next_letter ; found space
+  dec  c
+.str_found_end:
+  ld   a,c
+  ld   (de),a
+  ld   a,b ; a should contain how many letters left
+.nextarg_end:
+  pop  hl
+  pop  bc
+  ret
+  
 RTCInit:
   push bc
   push hl
@@ -755,12 +826,12 @@ readLine: ; result in input_buf & hl
   ld   a,b
   cp   0
   jr   z,.read_line_again ; at the beginning -> do nothing
-  ld   a,BS
+  ld   a,BS  ; put the cursor one back
   call putSerialChar
-  ld   a,' '
+  ld   a,' '  ; erase the char from the screen
   call putSerialChar
   dec  b   ; one less char in the string
-  ld   a,BS
+  ld   a,BS   ; put the cursor one back
   call putSerialChar
   jr   .read_line_again
 .if_not_bs:
@@ -1059,7 +1130,7 @@ help_msg:         db 45,"Commands: help, halt, load, dump, date, run",CR,LF
 halted_msg:       db 13,"System halted"
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
-loading_msg:      db 49,"Load program at 0x8000. Send data using Xmodem.",CR,LF
+loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"
 loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   db 20,"Error loading data",CR,LF
 argerror_msg:     db 27,"Wrong or missing argument",CR,LF
