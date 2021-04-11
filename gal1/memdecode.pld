@@ -2,36 +2,35 @@ GAL16V8   ; Memory decoder for Z80
 MEMDECODE ;Jaap Geurts
 
 ; Memory organization:
-; first 2k = ROM
-; from 32k-40k 8KB RAM
+; 8k = ROM0
+; 8k = ROM1
+; 8k = RAM0
+; 8k = RAM1
+; 32k = RAM2
 ; IO see below
 
 ;  1  2  3  4  5  6  7  8  9 10
 ; 11 12 13 14 15 16 17 18 19 20
 
-CLK  /RD   /WR   /IORQ /MREQ   A15   A7 A6 A5  GND
-NC   /ROMS /RAMS /CTCS /RTCS  /SIOS  /PIOS NC NC  VCC
+/RD   /WR /MREQ  A13  A14 A15 NC NC NC GND
+NC  NC NC NC /RAM2S /RAM1S /RAM0S /ROM1S /ROM0S VCC
 
-ROMS = MREQ * /A15 * RD
-     + MREQ * /A15 * WR
-RAMS = MREQ * A15 * RD
-     + MREQ * A15 * WR
+ROM0S = MREQ * /A15 * /A14 * /A13 * RD
+      + MREQ * /A15 * /A14 * /A13 * WR
 
-; CTC at address IO 0x00
-CTCS = IORQ * RD * /A7 * /A6 * /A5
-     + IORQ * WR * /A7 * /A6 * /A5
+ROM1S = MREQ * /A15 * /A14 * A13 * RD
+      + MREQ * /A15 * /A14 * A13 * WR
 
-; Realtime Clock at address IO 0x20
-RTCS = IORQ * RD * /A7 * /A6 * A5
-     + IORQ * WR * /A7 * /A6 * A5
+RAM0S = MREQ * /A15 * A14 * /A13 * RD
+      + MREQ * /A15 * A14 * /A13 * WR
 
-; SIO/0 at address IO 0x40
-SIOS = IORQ * RD * /A7 * A6 * /A5
-     + IORQ * WR * /A7 * A6 * /A5
+RAM1S = MREQ * /A15 * A14 * A13 * RD
+      + MREQ * /A15 * A14 * A13 * WR
 
-; PIO at address IO 0x60
-PIOS = IORQ * RD * /A7 * A6 * A5
-     + IORQ * WR * /A7 * A6 * A5
+RAM2S = MREQ * A15 * RD
+      + MREQ * A15 * WR
+
+
 
 DESCRIPTION
 ***

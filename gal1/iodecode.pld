@@ -9,8 +9,8 @@ IODECODE ;Jaap Geurts
 ;  1  2  3  4  5  6  7  8  9 10
 ; 11 12 13 14 15 16 17 18 19 20
 
-CLK /RD  /WR   /IORQ /M1 A0  A5   A6 A7 GND
-NC  /CFS /TFTS NC    NC  BC1 BDIR NC NC VCC
+/RD  /WR  /IORQ /M1 A0  A5 A6 A7 NC GND
+NC  /CFS /TFTS /PIOS /RTCS  BC1 BDIR /SIOS /CTCS VCC
 
 ; PSG
 ; 0x80 = write reg 
@@ -21,19 +21,40 @@ NC  /CFS /TFTS NC    NC  BC1 BDIR NC NC VCC
 ;    1 0 = write data 
 ;    1 1 = write reg (latch addr)
 
+
+; CTC at address IO 0x00
+CTCS = IORQ * RD * /A7 * /A6 * /A5
+     + IORQ * WR * /A7 * /A6 * /A5
+
+; Realtime Clock at address IO 0x20
+RTCS = IORQ * RD * /A7 * /A6 * A5
+     + IORQ * WR * /A7 * /A6 * A5
+
+; SIO/0 at address IO 0x40
+SIOS = IORQ * RD * /A7 * A6 * /A5
+     + IORQ * WR * /A7 * A6 * /A5
+
+; PIO at address IO 0x60
+PIOS = IORQ * RD * /A7 * A6 * A5
+     + IORQ * WR * /A7 * A6 * A5
+
+; AY-8910 at 0x80
 BDIR = IORQ * WR * A7 * /A6 * /A5 * A0 ; write data 0x81
      + IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
 BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 ; read data 0x81
     +  IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
+
+
 
 ; TFT display at 0xA0
 
 TFTS = IORQ * WR * A7 * /A6 * A5
      + IORQ * RD * A7 * /A6 * A5
 
-; 
+; Compact flash at 0xC0
 CFS = IORQ * WR * A7 * A6 * /A5
     + IORQ * RD * A7 * A6 * /A5
+
 
 DESCRIPTION
 ***
