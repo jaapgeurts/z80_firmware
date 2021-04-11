@@ -3,8 +3,8 @@
 ; Date: 2021-02-01
 ;
 
-rc2014=1
-;magnolia=1
+;rc2014=1
+sea80=1
 
 DUMP_ROWCOUNT    equ 0x08 ; 8 rows
 DUMP_BYTESPERROW equ 0x10 ; 16 bytes per row
@@ -23,7 +23,7 @@ RTC    equ 0x20
 ; SIO ports 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
-  ifdef magnolia
+  ifdef sea80
 SIO_AD equ 0x40
 SIO_AC equ 0x42
   endif
@@ -38,7 +38,7 @@ SIO_AD equ 0x81
   endif
 
 ; PSG ports
-  ifdef magnolia
+  ifdef sea80
 PSG_REG equ 0x80
 PSG_DATA equ 0x81
   endif
@@ -162,19 +162,19 @@ rom_entry:
 
   ; init realtime clock
 
-  ifdef magnolia
+  ifdef sea80
   ld   hl,rom_time
   call RTCInit
   endif
 
 ; init ctc timer
-  ; baudrates - Time constant @ 1.8432 MHz
-  ; 9600      - 12
-  ; 19200     - 6
-  ; 57600     - 2
-  ; 115200    - 1
+  ; baudrates - Time constant @ 3.6864 MHz
+  ; 9600      - 24
+  ; 19200     - 12
+  ; 57600     - 4
+  ; 115200    - 2
   ; baudrate in a
-  ld a, 12
+  ld a, 24
   call initCtc
 
 ; init serial
@@ -1195,8 +1195,8 @@ trans_table_shifted:
   db  '0', '.', '2', '5', '6', '8',0x1b,0xb7 ; 70
   db 0x00, '+', '3', '-', '*', '9',0xbe,0x00 ; 78
 
-  ifdef magnolia
-  org 0x0800
+  ifdef sea80
+  org 0x2000
   endif
   ifdef rc2014
   org 0x4000
