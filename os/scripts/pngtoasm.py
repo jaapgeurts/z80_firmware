@@ -1,25 +1,60 @@
 #!/usr/bin/python3 
 
 from PIL import Image
+im = Image.open(r'08x16_Novafont_Alejandro-Lieber.png')
+#im = Image.open(r'06x08_Terminal_Microsoft.png')
 
-im = Image.open(r'12x16_Terminal_Microsoft.png')
-
-
+# for 6x8 font
 for row in range(int(im.height/16)):
-  for col in range(int(im.width/12)):
+  for col in range(int(im.width/8)):
     print('letter',row*16+col,':  ; \'', chr(row*16+col),'\'',sep='')
     val = 0
     count = 0
     for y in range(16):
-        for x in range(12):
+        for x in range(8):
           val = val << 1
-          val = val | (0 if im.getpixel((col*12+x,row*16+y))[1]==0 else 1)
+          val = val | (0 if im.getpixel((col*8+x,row*16+y))[1]==0 else 1)
           count += 1
           if (count % 8) == 0:
             print('  db {0:#0{1}b}'.format(val,10))
             count = 0
             val = 0
     print()
+
+
+# # for 6x8 font
+# for row in range(int(im.height/8)):
+#   for col in range(int(im.width/6)):
+#     print('letter',row*8+col,':  ; \'', chr(row*8+col),'\'',sep='')
+#     val = 0
+#     count = 0
+#     for y in range(8):
+#         for x in range(6):
+#           val = val << 1
+#           val = val | (0 if im.getpixel((col*6+x,row*8+y))[1]==0 else 1)
+#           count += 1
+#           if (count % 8) == 0:
+#             print('  db {0:#0{1}b}'.format(val,10))
+#             count = 0
+#             val = 0
+#     print()
+
+# for 12x16 font
+# for row in range(int(im.height/16)):
+#   for col in range(int(im.width/12)):
+#     print('letter',row*16+col,':  ; \'', chr(row*16+col),'\'',sep='')
+#     val = 0
+#     count = 0
+#     for y in range(16):
+#         for x in range(12):
+#           val = val << 1
+#           val = val | (0 if im.getpixel((col*12+x,row*16+y))[1]==0 else 1)
+#           count += 1
+#           if (count % 8) == 0:
+#             print('  db {0:#0{1}b}'.format(val,10))
+#             count = 0
+#             val = 0
+#     print()
 
 # for row in range(int(im.height/16)):
 #   for col in range(int(im.width/12)):
