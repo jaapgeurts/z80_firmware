@@ -1,11 +1,11 @@
-CF_DATA    equ 0x60
-CF_ERRFT   equ 0x61
-CF_SECCNT  equ 0x62
-CF_LBA0    equ 0x63
-CF_LBA1    equ 0x64
-CF_LBA2    equ 0x65
-CF_LBA3    equ 0x66
-CF_STATCMD equ 0x67
+CF_DATA    equ 0xC0
+CF_ERRFT   equ 0xC1
+CF_SECCNT  equ 0xC2
+CF_LBA0    equ 0xC3
+CF_LBA1    equ 0xC4
+CF_LBA2    equ 0xC5
+CF_LBA3    equ 0xC6
+CF_STATCMD equ 0xC7
 
 CR equ 0x0D
 LF equ 0x0A

@@ -703,7 +703,7 @@ getArgument:
   
 RTCInit:
   push bc
-  push hl
+;  push hl
 
 ; start counting
   ld   a,0b00000000 ; test=0, 24hr, stop=0, reset=0
@@ -722,15 +722,15 @@ RTCInit:
   ld   a,0b00000011 ; stop + reset 
   out  (RTC+0x0f),a
 
-; set current time
-  ld   b,RTC_REG_COUNT
-  ld   c,RTC
-.RTCInit_next:
-  ld   a,(hl)
-  out  (c),a
-  inc  c
-  inc  hl
-  djnz .RTCInit_next
+; Don't set current time
+;  ld   b,RTC_REG_COUNT
+;  ld   c,RTC
+;.RTCInit_next:
+;  ld   a,(hl)
+;  out  (c),a
+;  inc  c
+;  inc  hl
+;  djnz .RTCInit_next
 
 ; start counter and release hold
   ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
@@ -738,7 +738,7 @@ RTCInit:
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
   out  (RTC+0x0d),a
 
-  pop  hl
+;  pop  hl
   pop  bc
   ret
 ; done init

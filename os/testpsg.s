@@ -36,6 +36,7 @@ PSG_AMPLC   equ 10
 
 PSG_ENABLE  equ 7
 
+  jr   flash
 ;begin:
 
   ld   a,PSG_FINEA          ; fine tone = @ 1.8Mhz => 262 ~ 440hz
@@ -66,20 +67,26 @@ flash:
   ; set port to output
   ld   a,7
   out  (PSG_REG),a
-  ld   a,0b01111111
+  ld   a,0b11111111
   out  (PSG_DATA),a
 
 again:
-  ld   a,14
+  ld   a,15
   out  (PSG_REG),a
   ld   a, 0xff
   out  (PSG_DATA),a
+  ld   b,15
+.sleep1:
   call delay
-  ld   a,14
+  djnz .sleep1
+  ld   a,15
   out  (PSG_REG),a
   ld   a, 0x00
   out  (PSG_DATA),a
+  ld   b,15
+.sleep2:
   call delay
+  djnz .sleep2
   jr   again
 
 
