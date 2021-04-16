@@ -45,6 +45,7 @@ COLS equ 60
 ROWS equ 20
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
+TOTALCHARS equ COLS * ROWS
 
   org 0x4000
 
@@ -137,6 +138,8 @@ delay2:
 ;  djnz  delay2
   ;ld   a,0x23 ; all pixels on
   ;out  (TFT_C),a
+
+  call displayClearBuffer
 
   call displayClear
 
@@ -265,10 +268,10 @@ displayRepaint:
   ; done with the glyph. goto next cell
   inc  bc   ; if bc < 1200 continue at .incxy
   ld   a,b
-  cp   (v_screenbuf + 1200) >> 8
+  cp   (v_screenbuf + TOTALCHARS) >> 8
   jr   nz,.incxy
   ld   a,c
-  cp   (v_screenbuf + 1200) & 0xff
+  cp   (v_screenbuf + TOTALCHARS) & 0xff
   jr   nz,.incxy
   ; done drawing
   jr   .printLetEnd
@@ -409,6 +412,23 @@ displayClear:
   jr   nz,.dpyClearLoop
 
   pop  bc
+  ret
+
+displayClearBuffer:
+  push hl
+  push bc
+ ; first clear backing store
+  ld   hl,v_screenbuf
+  ld   c,(TOTALCHARS >> 8) + 1
+  ld   b,TOTALCHARS & 0xff
+.nextclear:
+  ld   (hl),0
+  inc  hl
+  djnz .nextclear
+  dec  c
+  jr   nz,.nextclear
+  pop  bc
+  pop  hl
   ret
 
 displayScrollLastLine:

@@ -233,6 +233,7 @@ rom_entry:
   ld   (v_cursor_x),a
   ld   (v_cursor_y),a
 
+
   ; set all PSG ports to output
   ld   a,PSG_ENABLE
   out  (PSG_REG),a
@@ -1217,6 +1218,7 @@ initSerialKeyboard:
 
 initDisplay:
   push bc
+
   ld   a,0x01   ; reset TFT display
   out  (TFT_C),a
 
@@ -1460,10 +1462,29 @@ displaySetY1Y2:
   out  (TFT_D),a
   ret
 
+displayClearBuffer:
+  push hl
+  push bc
+ ; first clear backing store
+  ld   hl,v_screenbuf
+  ld   c,(TOTALCHARS >> 8) + 1
+  ld   b,TOTALCHARS & 0xff
+.nextclear:
+  ld   (hl),0
+  inc  hl
+  djnz .nextclear
+  dec  c
+  jr   nz,.nextclear
+  pop  bc
+  pop  hl
+  ret
+
+
 displayClear:
   push bc
   push de
   push hl
+
   ld   hl,0
   ld   de,0x01e0
   call displaySetX1X2
