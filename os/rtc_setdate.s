@@ -1,15 +1,17 @@
 RTC    equ 0x20
+RTC_CD  equ RTC+0x0d
+RTC_CE  equ RTC+0x0e
+RTC_CF  equ RTC+0x0f
 
 CR equ 0x0D
 LF equ 0x0A
 
-RTC_REG_COUNT equ 0x0d
+RTC_REG_COUNT equ 0x0c
 
 GETC     equ 0x0008 ; RST 1 getKey
 PUTC     equ 0x0010 ; RST 2 putSerialChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
-
 
   org 0x8000
   push hl
@@ -50,13 +52,23 @@ READLINE equ 0x0020 ; RST 4 readline
   ld   a,(ix+12)
   ld   (iy+0),a  ; 1 second
 
-; set actual data
+; start counting
+  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
+  out  (RTC_CD),a
+  ld   a,0b00000000 ; all clear
+  out  (RTC_CE),a
+  ld   a,0b00000000 ; test=0, 24hr, stop=0, reset=0
+  out  (RTC_CF),a
 
-  call RTCCheckBusy
+;  call RTCCheckBusy
 
+  call RTCStopReset
+
+; set actual time data
   ld   hl,v_timestruct
   ld   b,RTC_REG_COUNT
   ld   c,RTC
+  call RTCCheckBusy
 next:
   ld   a,(hl)
   out  (c),a
@@ -64,9 +76,12 @@ next:
   inc  hl
   djnz next
 
-  ; release hold
+; start counter and release hold
+  ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
+  out  (RTC_CF),a
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0,hold=0
-  out  (RTC+0x0d),a
+  out  (RTC_CD),a
+
 
   ld   hl, done_msg
   rst  PRINTK ; call printk
@@ -76,19 +91,26 @@ next:
   ret
 
 RTCCheckBusy:
-  push bc
   ld   a,0b00000001  
-  out  (RTC+0x0d),a  ; set hold to 1
-  in   a,(RTC+0x0d)  ; read busy bit
+  out  (RTC_CD),a  ; set hold to 1
+  in   a,(RTC_CD)  ; read busy bit;
   bit  1,a
-  jr   z,.RTCCheckBusy_end
-  ld   b,65  ; still busy
+  ; don't delay. unnecesary and is extra code
+  ret  z
   ld   a,0b00000000
-  out  (RTC+0x0d),a ; set hold to 0
-.RTCCheckBusy_delay:
-  djnz .RTCCheckBusy_delay ; decrease 65 times. takes 3cycles each run = ~211us
+  out  (RTC_CD),a  ; clear hold bit
   jr   RTCCheckBusy
-.RTCCheckBusy_end:
+
+RTCStopReset:
+  push  bc
+; stop and reset
+  ld   a,0b00000001 ; reset
+  out  (RTC_CF),a 
+  ld   b,153 ; delay 270us @ 7,372,800 MHz
+.RTCInit_delay:
+  djnz .RTCInit_delay ; decrease 255 times. takes 13 T-states each loop
+  ld   a,0b00000111 ; stop + reset + 24h
+  out  (RTC_CF),a
   pop  bc
   ret
 

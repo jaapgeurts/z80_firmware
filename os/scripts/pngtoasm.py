@@ -4,22 +4,31 @@ from PIL import Image
 im = Image.open(r'08x16_Novafont_Alejandro-Lieber.png')
 #im = Image.open(r'06x08_Terminal_Microsoft.png')
 
-# for 6x8 font
+# for 8x16 font
 for row in range(int(im.height/16)):
   for col in range(int(im.width/8)):
-    print('letter',row*16+col,':  ; \'', chr(row*16+col),'\'',sep='')
+    asciival = row*16+col;
+    if asciival >=32 and asciival<127 or asciival >= 160:
+      let = chr(asciival)
+    else:
+      let = '\\x' + str(asciival)
+    print('letter',asciival,':  ',sep='',end='')
     val = 0
     count = 0
+    print('  db ',end='')
     for y in range(16):
         for x in range(8):
           val = val << 1
           val = val | (0 if im.getpixel((col*8+x,row*16+y))[1]==0 else 1)
           count += 1
           if (count % 8) == 0:
-            print('  db {0:#0{1}b}'.format(val,10))
+            print('{0:#0{1}x}'.format(val,4),end='')
             count = 0
             val = 0
-    print()
+        if y < 15:
+            print(',',end='')
+        else:
+            print(' ; \'', let,'\'',sep='')            
 
 
 # # for 6x8 font
