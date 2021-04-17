@@ -293,6 +293,7 @@ welcome:
   ld hl,author_msg
   call printk
 
+  call displayClearBuffer
   call displayClear
 
 ; set leds to 7

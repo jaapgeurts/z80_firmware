@@ -23,10 +23,10 @@ ILI_SET_DPY_BRIGHT equ 0x51
 ILI_DPY_CTRL_VAL   equ 0x53
 ILI_READ_ID4       equ 0xd3
 
-v_screenbuf  equ 0x8000
-v_cursor_x   equ v_screenbuf + 1200 ; 1200 chars
-v_cursor_y   equ v_cursor_x + 1
-v_foreground equ v_cursor_y + 1
+v_screenbuf  equ 0x8034 ; must be aligned to multiple of 60
+v_cursor     equ v_screenbuf + TOTALCHARS; 1200 chars
+;v_cursor_y   equ v_cursor_x + 1
+v_foreground equ v_cursor + 1
 v_background equ v_foreground + 1
 vt_xstart    equ v_background + 1
 vt_xend      equ vt_xstart + 2
@@ -53,8 +53,7 @@ TOTALCHARS equ COLS * ROWS
   push bc
 
   ld   a,0
-  ld   (v_cursor_x),a
-  ld   (v_cursor_y),a
+  ld   (v_cursor),a
   ld   (v_background),a
   ld   a, 0xf8
   ld   (v_foreground),a
@@ -146,8 +145,8 @@ delay2:
   ld   hl,welcome_msg
   call printd
 
- ; ld   hl,lorumipsum
- ; call printd
+  ld   hl,lorumipsum
+  call printd
 
   ;call displayScrollLastLine
 
@@ -161,38 +160,74 @@ printd: ; push it into the buffer; then redraw the screen
   push bc
   push de
 
-  push hl ; is the string
-  ld   a,(v_cursor_y)
-  ld   b,a
-  ld   c,COLS
-  call multiply
-  ld   a,(v_cursor_x)
-  ld   b,0
-  ld   c,a
-  add  hl,bc
-  ld   bc,v_screenbuf
-  add  hl,bc
-  ex   de,hl  ; destination de
-  pop  hl   ; source string back into hl
+  ; add cursor index 
+  push hl
+  ld   d,0
+  ld   a,(v_cursor)
+  ld   e,a
+  ld   hl,v_screenbuf
+  add  hl,de
+  ex   de,hl
+  pop  hl
+
   ld   b,(hl)
 .printd_loop:
   inc  hl
   ld   a, (hl)
+  ; check for CR and LF
+  cp   CR
+  jr   nz, .checkLF
+  ; move cursor to home
+  ; get remainder
+  push hl
+  push bc
+  push de ;; ld hl,de
+  pop  hl 
+  ld   c,COLS
+  call division ; a = remainder
+  ld   b,0
+  ld   c,a
+  ex   de,hl ; de is v_cursor
+  sbc  hl,bc
+  ex   de,hl
+  pop  bc
+  pop  hl
+  jr   .endif
+.checkLF:
+  cp   LF
+  jr   nz,.storeChar
+  push hl
+  ld   hl,COLS
+  add  hl,de ; TODO: scroll screen if de > 1200
+  ex   de,hl
+  pop  hl
+  jr   .endif
+.storeChar:
   ld   (de),a
-  inc  de  
-  djnz .printd_loop 
+  inc  de
+.endif:
+  djnz .printd_loop
+
+  ; subtract screenbuf
+  ld   hl,v_screenbuf
+  ex   de,hl
+  sbc  hl,de
+  ld   (v_cursor),hl
 
   pop  de
   pop  bc
   pop  hl
   call displayRepaint
   ret
-  
+
 
 displayRepaint:
   push hl
   push bc
   push de
+
+  ;; TODO currently assumes from start to end.
+  ; rewrite draw from start cursor to end cursor
 
   ld   hl,0
   ld   (vt_xstart),hl
@@ -220,6 +255,7 @@ displayRepaint:
   out  (TFT_C),a
 
   ld   a,(bc) ; load letter
+  
   ; get the glyph
   ld   de,BYTESPERFONT  ; font small
   ld   hl,allletters
@@ -354,6 +390,26 @@ multiply:
 .end:
   pop  bc
   pop  de
+  ret
+
+; hl by c, quotient in hl, remainder in a
+division:
+  push bc
+  xor	a
+  ld	b, 16
+
+.loop:
+  add	hl, hl
+  rla
+  jr	c, $+5
+  cp	c
+  jr	c, $+4
+
+  sub	c
+  inc	l
+   
+  djnz	.loop
+  pop  bc 
   ret
 
 ; hl = x1,de = x2
