@@ -25,13 +25,14 @@ ILI_READ_ID4       equ 0xd3
 
 v_screenbuf  equ 0x8034 ; must be aligned to multiple of 60
 v_cursor     equ v_screenbuf + TOTALCHARS; 1200 chars
-;v_cursor_y   equ v_cursor_x + 1
-v_foreground equ v_cursor + 1
+v_foreground equ v_cursor + 2
 v_background equ v_foreground + 1
 vt_xstart    equ v_background + 1
 vt_xend      equ vt_xstart + 2
 vt_ystart    equ vt_xend + 2
 vt_yend      equ vt_ystart + 2
+v_tmp        equ vt_yend + 2 ; word 
+other:       equ v_tmp + 2 ;
 
 ; terminal size, total chars, font sizes
 ; 40x20,  800, 12x16
@@ -52,8 +53,9 @@ TOTALCHARS equ COLS * ROWS
   push hl
   push bc
 
+  ld   bc,0
+  ld   (v_cursor),bc
   ld   a,0
-  ld   (v_cursor),a
   ld   (v_background),a
   ld   a, 0xf8
   ld   (v_foreground),a
@@ -148,6 +150,9 @@ delay2:
   ld   hl,lorumipsum
   call printd
 
+  ld   hl,anotherline
+  call printd
+
   ;call displayScrollLastLine
 
   pop  bc
@@ -160,11 +165,11 @@ printd: ; push it into the buffer; then redraw the screen
   push bc
   push de
 
-  ; add cursor index 
+  ld  de,(v_cursor) ; remember start pos
+  ld  (v_tmp),de
+
+  ; add cursor index  to screenbuf start
   push hl
-  ld   d,0
-  ld   a,(v_cursor)
-  ld   e,a
   ld   hl,v_screenbuf
   add  hl,de
   ex   de,hl
@@ -179,19 +184,20 @@ printd: ; push it into the buffer; then redraw the screen
   jr   nz, .checkLF
   ; move cursor to home
   ; get remainder
-  push hl
-  push bc
-  push de ;; ld hl,de
-  pop  hl 
+  push hl ; store the str pointer
+  push bc ; store the str index counter
+  push de ; ld hl,de
+  pop  hl ; hl contains the v_cursor
+  ; TODO: mask off alignment instead of division
   ld   c,COLS
   call division ; a = remainder
   ld   b,0
   ld   c,a
-  ex   de,hl ; de is v_cursor
+  ex   de,hl ; ld hl with v_cursor(de)
   sbc  hl,bc
-  ex   de,hl
-  pop  bc
-  pop  hl
+  ex   de,hl ; ld result back into v_cursor(de)
+  pop  bc  ; restore the str index counter
+  pop  hl  ; restore the str pointer
   jr   .endif
 .checkLF:
   cp   LF
@@ -210,14 +216,30 @@ printd: ; push it into the buffer; then redraw the screen
 
   ; subtract screenbuf
   ld   hl,v_screenbuf
-  ex   de,hl
+  ex   de,hl ; 
   sbc  hl,de
   ld   (v_cursor),hl
+
+  ld   bc,(v_tmp)
+  ld   a,b
+  call printhex
+  ld   a,c
+  call printhex
+  ld   a,'-'
+  rst  PUTC
+  ld   de,(v_cursor)
+  ld   a,d
+  call printhex
+  ld   a,e
+  call printhex
+  ld   a,':'
+  rst  PUTC
+  call displayRepaint
 
   pop  de
   pop  bc
   pop  hl
-  call displayRepaint
+
   ret
 
 
@@ -226,23 +248,49 @@ displayRepaint:
   push bc
   push de
 
-  ;; TODO currently assumes from start to end.
-  ; rewrite draw from start cursor to end cursor
+  ; draw from start(bc) to end(de)
+  ld   hl,v_screenbuf
+  add  hl,de ; save end location
+  ld   (v_tmp),hl
 
-  ld   hl,0
+   ; calculate startx = (start%60 ) * fontw
+  ; calculate starty = (start/60) * fonth
+  push bc
+  push bc
+  pop  hl ; ld hl,bc
+  ld   c,60
+  call division ; hl / c = hl rem a
+  push hl ; push quotient (y)
+  ; calc x
+  ld   b,a
+  ld   c,FONTW
+  call multiply ; result in hl
   ld   (vt_xstart),hl
-  ld   (vt_ystart),hl
-  ld   hl,FONTW-1
+  ld   bc,FONTW-1
+  add  hl,bc
   ld   (vt_xend),hl
-  ld   hl,FONTH-1
+  ; calc y
+  pop  hl
+  ld   b,l
+  ld   c,FONTH
+  call multiply ; result in hl
+  ld   (vt_ystart),hl
+  ld   bc,FONTH-1
+  add  hl,bc
   ld   (vt_yend),hl
 
   ; go through the array. if dirty draw
-  ld   bc, v_screenbuf
+  pop  bc
+  ld   hl,v_screenbuf
+  add  hl,bc
+  push hl
+  pop  bc ; ld bc,hl: bc contains start location in screenbuf
 
-.nextGlyph
+.nextGlyph:
 
   ; set display start and end position
+  ; TODO: don't calculate and storev_x/yend because it's fixed.
+  ; just calculate here
   ld   hl,(vt_xend)
   ex   de,hl
   ld   hl,(vt_xstart)
@@ -283,7 +331,7 @@ displayRepaint:
   jr   z,.pix_off
   ld   a,0xff   ; foreground white
   out  (TFT_D),a
-  ld   a,0xff
+;  ld   a,0xff
   out  (TFT_D),a
   jr   .continue
 .pix_off 
@@ -303,11 +351,12 @@ displayRepaint:
   
   ; done with the glyph. goto next cell
   inc  bc   ; if bc < 1200 continue at .incxy
+  ld   de,(v_tmp)
   ld   a,b
-  cp   (v_screenbuf + TOTALCHARS) >> 8
+  cp   d
   jr   nz,.incxy
   ld   a,c
-  cp   (v_screenbuf + TOTALCHARS) & 0xff
+  cp   e
   jr   nz,.incxy
   ; done drawing
   jr   .printLetEnd
@@ -409,7 +458,7 @@ division:
   inc	l
    
   djnz	.loop
-  pop  bc 
+  pop   bc 
   ret
 
 ; hl = x1,de = x2
@@ -498,8 +547,9 @@ displayScrollLastLine:
 
 welcome_msg:   db 18,"TFT Display test",CR,LF
 hexconv_table: db "0123456789ABCDEF"
-lorumipsum:    db 255,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc impe"
-lorumipsum2:   db 35,"Lorem ipsum dolor sit amet, consect"
+lorumipsum:    db 255,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc im",CR,LF
+lorumipsum2:   db 35,"Lorem ipsum dolor sit amet, conse",CR,LF
+anotherline:   db 30,"This is another line of text",CR,LF
 
 allletters:
 allletters_08x16:
