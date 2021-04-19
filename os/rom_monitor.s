@@ -133,19 +133,18 @@ LED3 equ 0x08
 readline_buf equ VAR_TOP - READLINE_BUF_SIZE ; 64 bytes for the readline buffer
                                     ; 64 bytes for the rest
 v_shifted    equ readline_buf - 1 ; shift keystate
-v_cursor_x equ  v_shifted - 1
-v_cursor_y equ  v_cursor_x - 1
-keyb_buf_wr  equ v_cursor_y - 2     ; write index
+v_cursor equ  v_shifted - 2  ; word
+keyb_buf_wr  equ v_cursor - 2     ; write index
 keyb_buf_rd  equ keyb_buf_wr - 2  ; read index
 v_timestruct equ keyb_buf_rd - RTC_REG_COUNT ; time structure
 
 v_foreground equ v_timestruct - 1
 v_background equ v_foreground - 1
-vt_xstart    equ v_background - 1
-vt_xend      equ vt_xstart - 2
-vt_ystart    equ vt_xend - 2
-vt_yend      equ vt_ystart - 2
-v_screenbuf  equ vt_yend - TOTALCHARS
+vt_xstart    equ v_background - 2
+vt_ystart    equ vt_xstart - 2
+v_tmp        equ vt_ystart - 2 ; word 
+v_tmp2       equ v_tmp - 2 ; word 
+v_screenbuf  equ 0xF000
 
 ; ring buffer. Lives at 0x100 below the top
 keyb_buf     equ SER_BUF_TOP - SER_BUF_SIZE; // 32 bytes keyboard ring buffer
@@ -230,8 +229,8 @@ rom_entry:
   ld   (keyb_buf_rd),hl
   ld   a,0
   ld   (v_shifted),a
-  ld   (v_cursor_x),a
-  ld   (v_cursor_y),a
+  ld   bc,0
+  ld   (v_cursor),bc
 
 
   ; set all PSG ports to output
@@ -312,6 +311,7 @@ welcome:
 main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
+  
 
   call readLine        ; read an input line; result in hl
   call println
@@ -967,6 +967,27 @@ multiply:
   pop  de
   ret
 
+; hl by c, quotient in hl, remainder in a
+division:
+  push bc
+  xor	a
+  ld	b, 16
+
+.loop:
+  add	hl, hl
+  rla
+  jr	c, $+5
+  cp	c
+  jr	c, $+4
+
+  sub	c
+  inc	l
+   
+  djnz	.loop
+  pop   bc 
+  ret
+
+
 getKeyWait:
   call getKey
   jr   z, getKeyWait
@@ -1284,65 +1305,147 @@ printd: ; push it into the buffer; then redraw the screen
   push bc
   push de
 
-  push hl ; is the string
-  ld   a,(v_cursor_y)
-  ld   b,a
-  ld   c,COLS
-  call multiply
-  ld   a,(v_cursor_x)
+  ld  de,(v_cursor) ; remember start pos
+  ld  (v_tmp),de
+
+  ; add cursor index  to screenbuf start
+  push hl
+  ld   hl,v_screenbuf
+  add  hl,de
+  ex   de,hl
+  pop  hl
+
+  ; calculate end position
   ld   b,0
-  ld   c,a
+  ld   c,(hl)
+  push hl
+  ld   hl,(v_cursor)
   add  hl,bc
-  ld   bc,v_screenbuf
-  add  hl,bc
-  ex   de,hl  ; destination de
-  pop  hl   ; source string back into hl
+  ld   (v_tmp2),hl
+  pop  hl
+
   ld   b,(hl)
 .printd_loop:
   inc  hl
   ld   a, (hl)
+  ; check for CR and LF
+  cp   CR
+  jr   nz, .checkLF
+  ; move cursor to home
+  ; get remainder
+  push hl ; store the str pointer
+  push bc ; store the str index counter
+  push de ; ld hl,de
+  pop  hl ; hl contains the v_cursor
+  ; TODO: mask off alignment instead of division
+  ld   c,COLS
+  call division ; a = remainder
+  scf
+  ccf ; clear carry flag
+  ld   b,0
+  ld   c,a
+  ex   de,hl ; ld hl with v_cursor(de)
+  sbc  hl,bc
+  ex   de,hl ; ld result back into v_cursor(de)
+  pop  bc  ; restore the str index counter
+  pop  hl  ; restore the str pointer
+  jr   .endif
+.checkLF:
+  cp   LF
+  jr   nz,.storeChar
+  push hl
+  ld   hl,COLS
+  add  hl,de ; TODO: scroll screen if de > 1200
+  ex   de,hl
+  pop  hl
+  jr   .endif
+.storeChar:
   ld   (de),a
-  inc  de  
-  djnz .printd_loop 
+  inc  de
+.endif:
+  djnz .printd_loop
+
+  ; subtract screenbuf
+  scf
+  ccf
+  ld   hl,v_screenbuf
+  ex   de,hl ; 
+  sbc  hl,de
+  ld   (v_cursor),hl
+
+  ld   bc,(v_tmp)
+  ; end is start + length of str
+  ld   de,(v_tmp2)
+
+  call displayRepaint
 
   pop  de
   pop  bc
   pop  hl
-  call displayRepaint
-  ret
-  
 
+  ret
+
+; bc: start, de: end
 displayRepaint:
   push hl
   push bc
   push de
 
-  ld   hl,0
+  ; draw from start(bc) to end(de)
+  ld   hl,v_screenbuf
+  add  hl,de ; save end location
+  ld   (v_tmp),hl
+
+  ; calculate startx = (start%60 ) * fontw
+  ; calculate starty = (start/60) * fonth
+  push bc
+  push bc
+  pop  hl ; ld hl,bc
+  ld   c,60
+  call division ; hl / c = hl rem a
+  push hl ; push quotient (y)
+  ; calc x
+  ld   b,a
+  ld   c,FONTW
+  call multiply ; result in hl
   ld   (vt_xstart),hl
+  ; calc y
+  pop  hl
+  ld   b,l
+  ld   c,FONTH
+  call multiply ; result in hl
   ld   (vt_ystart),hl
-  ld   hl,FONTW-1
-  ld   (vt_xend),hl
-  ld   hl,FONTH-1
-  ld   (vt_yend),hl
-
   ; go through the array. if dirty draw
-  ld   bc, v_screenbuf
+  pop  bc
+  ld   hl,v_screenbuf
+  add  hl,bc
+  push hl
+  pop  bc ; ld bc,hl: bc contains start location in screenbuf
 
-.nextGlyph
+.nextGlyph:
 
   ; set display start and end position
-  ld   hl,(vt_xend)
-  ex   de,hl
+  push bc
   ld   hl,(vt_xstart)
-  call displaySetX1X2
-  ld   hl,(vt_yend)
-  ex   de,hl
+  push hl ; save start
+  ld   bc,FONTW-1
+  add  hl,bc
+  ex   de,hl ; end in de
+  pop  hl ; restore start
+  call displaySetX1X2  ; from hl -> de
   ld   hl,(vt_ystart)
+  push hl   ; save start
+  ld   bc,FONTH-1
+  add  hl,bc
+  ex   de,hl ; end in de
+  pop  hl
   call displaySetY1Y2
   ld   a,ILI_MEM_WRITE    ; do write
   out  (TFT_C),a
+  pop  bc
 
   ld   a,(bc) ; load letter
+  
   ; get the glyph
   ld   de,BYTESPERFONT  ; font small
   ld   hl,allletters
@@ -1370,7 +1473,7 @@ displayRepaint:
   jr   z,.pix_off
   ld   a,0xff   ; foreground white
   out  (TFT_D),a
-  ld   a,0xff
+;  ld   a,0xff
   out  (TFT_D),a
   jr   .continue
 .pix_off 
@@ -1389,12 +1492,13 @@ displayRepaint:
   pop  bc
   
   ; done with the glyph. goto next cell
-  inc  bc   ; if bc < TOTALCHARS continue at .incxy
+  inc  bc   ; if bc < 1200 continue at .incxy
+  ld   de,(v_tmp)
   ld   a,b
-  cp   (v_screenbuf + TOTALCHARS) >> 8
+  cp   d
   jr   nz,.incxy
   ld   a,c
-  cp   (v_screenbuf + TOTALCHARS) & 0xff
+  cp   e
   jr   nz,.incxy
   ; done drawing
   jr   .printLetEnd
@@ -1411,22 +1515,14 @@ displayRepaint:
   cp  0xe0  ; one beyond the last column
   jr  nz, .next1
   ; over edge; increase y and set x to zero
-  ld  hl,FONTW-1
-  ld  (vt_xend),hl
   ; increase y
   ld  hl,(vt_ystart)
   ld  de,FONTH
   add hl,de
   ld  (vt_ystart),hl
-  ld  de,FONTH-1
-  add hl,de
-  ld  (vt_yend),hl
   ld  hl,0  ;set x-start to zero
 .next1:
   ld  (vt_xstart),hl
-  ld  de,FONTW-1
-  add hl,de
-  ld  (vt_xend),hl
   jp  .nextGlyph
 
 .printLetEnd:
@@ -1525,7 +1621,7 @@ setLed:
   out  (PSG_DATA),a
   ret
 
-rom_msg:          db 22,"Z80 ROM Monitor v0.2",CR,LF
+rom_msg:          db 22,"Z80 ROM Monitor v0.3",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 help_msg:         db 66,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>",CR,LF
 halted_msg:       db 13,"System halted"

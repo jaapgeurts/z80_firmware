@@ -435,7 +435,6 @@ multiply:
   pop  de
   ret
 
-
 ; hl by c, quotient in hl, remainder in a
 division:
   push bc
