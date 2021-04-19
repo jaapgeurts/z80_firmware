@@ -28,10 +28,8 @@ v_cursor     equ v_screenbuf + TOTALCHARS; 1200 chars
 v_foreground equ v_cursor + 2
 v_background equ v_foreground + 1
 vt_xstart    equ v_background + 1
-vt_xend      equ vt_xstart + 2
-vt_ystart    equ vt_xend + 2
-vt_yend      equ vt_ystart + 2
-v_tmp        equ vt_yend + 2 ; word 
+vt_ystart    equ vt_xstart + 2
+v_tmp        equ vt_ystart + 2 ; word 
 v_tmp2        equ v_tmp + 2 ; word 
 other:       equ v_tmp2 + 2 ;
 
@@ -271,19 +269,12 @@ displayRepaint:
   ld   c,FONTW
   call multiply ; result in hl
   ld   (vt_xstart),hl
-  ld   bc,FONTW-1
-  add  hl,bc
-  ld   (vt_xend),hl
   ; calc y
   pop  hl
   ld   b,l
   ld   c,FONTH
   call multiply ; result in hl
   ld   (vt_ystart),hl
-  ld   bc,FONTH-1
-  add  hl,bc
-  ld   (vt_yend),hl
-
   ; go through the array. if dirty draw
   pop  bc
   ld   hl,v_screenbuf
@@ -294,18 +285,24 @@ displayRepaint:
 .nextGlyph:
 
   ; set display start and end position
-  ; TODO: don't calculate and storev_x/yend because it's fixed.
-  ; just calculate here
-  ld   hl,(vt_xend)
-  ex   de,hl
+  push bc
   ld   hl,(vt_xstart)
-  call displaySetX1X2
-  ld   hl,(vt_yend)
-  ex   de,hl
+  push hl ; save start
+  ld   bc,FONTW-1
+  add  hl,bc
+  ex   de,hl ; end in de
+  pop  hl ; restore start
+  call displaySetX1X2  ; from hl -> de
   ld   hl,(vt_ystart)
+  push hl   ; save start
+  ld   bc,FONTH-1
+  add  hl,bc
+  ex   de,hl ; end in de
+  pop  hl
   call displaySetY1Y2
   ld   a,ILI_MEM_WRITE    ; do write
   out  (TFT_C),a
+  pop  bc
 
   ld   a,(bc) ; load letter
   
@@ -378,22 +375,14 @@ displayRepaint:
   cp  0xe0  ; one beyond the last column
   jr  nz, .next1
   ; over edge; increase y and set x to zero
-  ld  hl,FONTW-1
-  ld  (vt_xend),hl
   ; increase y
   ld  hl,(vt_ystart)
   ld  de,FONTH
   add hl,de
   ld  (vt_ystart),hl
-  ld  de,FONTH-1
-  add hl,de
-  ld  (vt_yend),hl
   ld  hl,0  ;set x-start to zero
 .next1:
   ld  (vt_xstart),hl
-  ld  de,FONTW-1
-  add hl,de
-  ld  (vt_xend),hl
   jp  .nextGlyph
 
 .printLetEnd:
