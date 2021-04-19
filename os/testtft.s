@@ -145,29 +145,15 @@ delay2:
 
   call displayClear
 
-;  ld   hl,welcome_msg
-;  call printd
-
-;  ld   hl,anotherline
-;  call printd
-
-;  ld   hl,lorumipsum
-;  call printd
-
-  ld   hl,txtA
+  ld   hl,welcome_msg
   call printd
 
-  ld   hl,txtB
+  ld   hl,anotherline
   call printd
 
-  ld   hl,txtC
+  ld   hl,lorumipsum
   call printd
 
-  ld   hl,txtD
-  call printd
-
-  ld   hl,txtE
-  call printd
 
   ;call displayScrollLastLine
 
@@ -250,24 +236,8 @@ printd: ; push it into the buffer; then redraw the screen
   ld   (v_cursor),hl
 
   ld   bc,(v_tmp)
-  ; DEBUG START
-  ld   a,b
-  call printhex
-  ld   a,c
-  call printhex
-  ld   a,'-'
-  rst  PUTC
-  ; DEBUG END
   ; end is start + length of str
   ld   de,(v_tmp2)
-  ; DEBUG START
-  ld   a,d
-  call printhex
-  ld   a,e
-  call printhex
-  ld   a,':'
-  ; DEBUG END
-  rst  PUTC
 
   call displayRepaint
 
@@ -276,12 +246,6 @@ printd: ; push it into the buffer; then redraw the screen
   pop  hl
 
   ret
-
-txtA:   db 6,"ABCD",CR,LF
-txtB:   db 6,"EFGH",CR,LF
-txtC:   db 6,"IJKL",CR,LF
-txtD:   db 6,"MNOP",CR,LF
-txtE:   db 6,"QRST",CR,LF
 
 ; bc: start, de: end
 displayRepaint:
@@ -591,7 +555,7 @@ welcome_msg:   db 18,"TFT Display test",CR,LF
 hexconv_table: db "0123456789ABCDEF"
 lorumipsum:    db 254,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc i",CR,LF
 lorumipsum2:   db 35,"Lorem ipsum dolor sit amet, conse",CR,LF
-
+anotherline:   db 30,"This is another line of text",CR,LF
 
 allletters:
 allletters_08x16:
