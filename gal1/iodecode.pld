@@ -1,10 +1,15 @@
 GAL16V8   ; IO decoder for Z80
 IODECODE ;Jaap Geurts
 
-; Memory organization:
-; first 2k = ROM
-; from 32k-40k 8KB RAM
-; IO see below
+; IO Memory organization:
+; 0x00 - Z84-3000, Timer/Counter
+; 0x20 - RTC27421, Realtime Clock
+; 0x40 - Z84-4000, Serial IO
+; 0x60 - Z84-2000, Parallel IO
+; 0x80 - AY-8910, Sound
+; 0xA0 - ILI9488, LCD Display,
+; 0xC0 - CF, Compact Fash, IDE interface
+; 0xE0 - Free
 
 ;  1  2  3  4  5  6  7  8  9 10
 ; 11 12 13 14 15 16 17 18 19 20
