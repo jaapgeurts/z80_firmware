@@ -906,9 +906,10 @@ readLine: ; result in input_buf & hl
   call putSerialChar
   ld   a,' '  ; erase the char from the screen
   call putSerialChar
-  dec  b   ; one less char in the string
   ld   a,BS   ; put the cursor one back
   call putSerialChar
+  dec  b   ; one less char in the string
+  dec  de
   jr   .read_line_again
 .if_not_bs:
   call putSerialChar

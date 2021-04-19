@@ -32,7 +32,8 @@ vt_xend      equ vt_xstart + 2
 vt_ystart    equ vt_xend + 2
 vt_yend      equ vt_ystart + 2
 v_tmp        equ vt_yend + 2 ; word 
-other:       equ v_tmp + 2 ;
+v_tmp2        equ v_tmp + 2 ; word 
+other:       equ v_tmp2 + 2 ;
 
 ; terminal size, total chars, font sizes
 ; 40x20,  800, 12x16
@@ -144,13 +145,28 @@ delay2:
 
   call displayClear
 
-  ld   hl,welcome_msg
+;  ld   hl,welcome_msg
+;  call printd
+
+;  ld   hl,anotherline
+;  call printd
+
+;  ld   hl,lorumipsum
+;  call printd
+
+  ld   hl,txtA
   call printd
 
-  ld   hl,lorumipsum
+  ld   hl,txtB
   call printd
 
-  ld   hl,anotherline
+  ld   hl,txtC
+  call printd
+
+  ld   hl,txtD
+  call printd
+
+  ld   hl,txtE
   call printd
 
   ;call displayScrollLastLine
@@ -175,6 +191,15 @@ printd: ; push it into the buffer; then redraw the screen
   ex   de,hl
   pop  hl
 
+  ; calculate end position
+  ld   b,0
+  ld   c,(hl)
+  push hl
+  ld   hl,(v_cursor)
+  add  hl,bc
+  ld   (v_tmp2),hl
+  pop  hl
+
   ld   b,(hl)
 .printd_loop:
   inc  hl
@@ -191,6 +216,8 @@ printd: ; push it into the buffer; then redraw the screen
   ; TODO: mask off alignment instead of division
   ld   c,COLS
   call division ; a = remainder
+  scf
+  ccf ; clear carry flag
   ld   b,0
   ld   c,a
   ex   de,hl ; ld hl with v_cursor(de)
@@ -215,25 +242,33 @@ printd: ; push it into the buffer; then redraw the screen
   djnz .printd_loop
 
   ; subtract screenbuf
+  scf
+  ccf
   ld   hl,v_screenbuf
   ex   de,hl ; 
   sbc  hl,de
   ld   (v_cursor),hl
 
   ld   bc,(v_tmp)
+  ; DEBUG START
   ld   a,b
   call printhex
   ld   a,c
   call printhex
   ld   a,'-'
   rst  PUTC
-  ld   de,(v_cursor)
+  ; DEBUG END
+  ; end is start + length of str
+  ld   de,(v_tmp2)
+  ; DEBUG START
   ld   a,d
   call printhex
   ld   a,e
   call printhex
   ld   a,':'
+  ; DEBUG END
   rst  PUTC
+
   call displayRepaint
 
   pop  de
@@ -242,7 +277,13 @@ printd: ; push it into the buffer; then redraw the screen
 
   ret
 
+txtA:   db 6,"ABCD",CR,LF
+txtB:   db 6,"EFGH",CR,LF
+txtC:   db 6,"IJKL",CR,LF
+txtD:   db 6,"MNOP",CR,LF
+txtE:   db 6,"QRST",CR,LF
 
+; bc: start, de: end
 displayRepaint:
   push hl
   push bc
@@ -253,7 +294,7 @@ displayRepaint:
   add  hl,de ; save end location
   ld   (v_tmp),hl
 
-   ; calculate startx = (start%60 ) * fontw
+  ; calculate startx = (start%60 ) * fontw
   ; calculate starty = (start/60) * fonth
   push bc
   push bc
@@ -441,6 +482,7 @@ multiply:
   pop  de
   ret
 
+
 ; hl by c, quotient in hl, remainder in a
 division:
   push bc
@@ -547,9 +589,9 @@ displayScrollLastLine:
 
 welcome_msg:   db 18,"TFT Display test",CR,LF
 hexconv_table: db "0123456789ABCDEF"
-lorumipsum:    db 255,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc im",CR,LF
+lorumipsum:    db 254,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc i",CR,LF
 lorumipsum2:   db 35,"Lorem ipsum dolor sit amet, conse",CR,LF
-anotherline:   db 30,"This is another line of text",CR,LF
+
 
 allletters:
 allletters_08x16:
