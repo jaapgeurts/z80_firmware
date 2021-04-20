@@ -28,5 +28,8 @@ testkbd:
 testtft:
 	vasm -z80asm -Fbin -o testtft.bin testtft.s
 
+view:
+	vasm -z80asm -Fbin -o view.bin view.s
+
 testcf:
 	vasm -z80asm -Fbin -o testcf.bin testcf.s
