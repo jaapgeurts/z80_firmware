@@ -1277,7 +1277,7 @@ delay1:
    
   ld   a,ILI_MEM_ACCESS_CTL     ; set address mode
   out  (TFT_C),a
-  ld   a,0b00100000
+  ld   a,0b00101000
 ;  ld   a,0b00000000
   out   (TFT_D),a
 

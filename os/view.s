@@ -44,6 +44,19 @@ DPYHEIGHT equ 320
   ld   hl,welcome_msg
   rst  PRINTK
 
+;   ld   a,0x0B  ; get display status
+;   out  (TFT_C),a
+
+;   in   a,(TFT_D); dummy data
+;   in   a,(TFT_D) ; [D7:0]
+;   call printhex
+
+;   ld   a,ILI_MEM_ACCESS_CTL     ; set address mode
+;   out  (TFT_C),a
+;   ld   a,0b00100000
+; ;  ld   a,0b00000000
+;   out   (TFT_D),a
+
   call initCompactFlash
 
   call viewImage
@@ -77,19 +90,19 @@ viewImage:
   out  (TFT_C),a
 
   ; prepare compact flash read
-  ld   a,'2'
+  ld   a,'D'
   rst  PUTC
 
   ld   hl,0 ; start at 0
   ld   de,0 ; start at 0
-  ld   b,201 ; = sector count, 512 bytes
+  ld   b,200 ; = sector count, 512 bytes
   call cfSetBlock
   call cfIssueCommand
 
-  ld   a,'3'
+  ld   a,'C'
   rst  PUTC
 
-; loop 480x320 times = 3 * 200 * 256
+; loop 480x320 times = 3 * 200 * 256 * 2
   ld   d,3
   ld   bc,200 ; b = 0 , c = 200
 .viewloop:
@@ -114,7 +127,7 @@ viewImage:
   call multiply
   ex   de,hl
   ld   hl,0 ; start at 0
-  ld   b,201 ; = sector count, 512 bytes
+  ld   b,200 ; = sector count, 512 bytes
   call cfSetBlock
   call cfIssueCommand
 
@@ -250,7 +263,7 @@ initCompactFlash:
   ld   a,0xef
   out  (CF_STATCMD),a ; enable the 8 bit feature
 
-  ld   a,'1'
+  ld   a,'I'
   rst  PUTC
 
   ret
@@ -274,17 +287,14 @@ cfSetBlock:
   out  (CF_LBA2),a
 
   call cfWaitBusy
- ; ld   a,h ; 24..27 of the block address
- ; and  0x0f
- ; or   0xe0   ; lba mode
-  ld  a,0xe0
+  ld   a,h ; 24..27 of the block address
+  and  0x0f
+  or   0xe0   ; lba mode
   out  (CF_LBA3),a
   ret
   
 cfIssueCommand:
   call  cfWaitCmdReady
-  ld   a,'R'
-  rst  PUTC
   ; issue read command
   ld   a, 0x20 
   ;ld   a, 0xec  ; $ec = drive id
@@ -293,6 +303,7 @@ cfIssueCommand:
   in   a,(CF_STATCMD)					;Read status
   and  %00000001					;mask off error bit
   jr   nz,cfIssueCommand				;Try again if error
+  ret
 
 cfReadByte:
 ; read byte

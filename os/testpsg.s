@@ -9,16 +9,6 @@ PUTC     equ 0x0010 ; RST 2 putSerialChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
-
-  org 0x8000
-  push hl
-  push bc
-
-  ld   hl, welcome_msg
-  rst  PRINTK ; call printk
-
-  ;jr   flash
-
 ; tp10 = 131
 ; ct10 = 0
 ; ft10 = 131
@@ -35,13 +25,74 @@ PSG_COARSEC equ 5
 PSG_AMPLC   equ 10
 
 PSG_ENABLE  equ 7
+PSG_PORTA   equ 14
+PSG_PORTB   equ 15
 
-  jr   flash
-;begin:
+  org 0x8000
+  push hl
+  push bc
+
+  ld   hl, welcome_msg
+  rst  PRINTK ; call printk
+
+ start:
+  ; set port to output
+  ld   a,PSG_ENABLE
+  ld   b,0b10111111
+  call psgWrite
+
+  ld   b,2
+  ld   a,PSG_PORTB ; write out to port
+  call psgWrite
+.again:
+  ld   a,PSG_PORTA
+  call psgRead
+  bit  0,a
+  jr   nz,.nextbut
+  ; delay
+  call delay_long
+  ld   a,PSG_PORTA
+  call psgRead
+  bit  0,a
+  jr   nz,.nextbut
+  sla  b
+  ld   a,b
+  cp   0x10
+  jr   nz,.next
+  ld   b,2
+.next:
+  ld   a,PSG_PORTB ; write out to port
+  call psgWrite
+  jr   .again
+
+.nextbut:
+  bit  1,a
+  jr   nz,.again
+
+  ld   a,PSG_PORTB ; write out to port
+  ld   b,0
+  call psgWrite
+
+  pop  bc
+  pop  hl
+  ret
+
+psgWrite:
+  out  (PSG_REG),a
+  ld   a,b
+  out  (PSG_DATA),a
+  ret
+
+psgRead:
+  out  (PSG_REG),a
+  in   a,(PSG_DATA)
+  ret
+
+sound:
 
   ld   a,PSG_FINEA          ; fine tone = @ 1.8Mhz => 262 ~ 440hz
   out  (PSG_REG),a
-  ld   a,6
+  ld   a,30
   out  (PSG_DATA),a
 
   ld   a,PSG_COARSEA          ; course tone = 0
@@ -60,7 +111,7 @@ PSG_ENABLE  equ 7
   out  (PSG_DATA),a
 
   ;jr   begin
-  halt
+  ret
 
 flash:
 
@@ -95,12 +146,20 @@ again:
   ret
 
 delay:
+  push bc
+  ld   b,0x80
+.loop:
+  djnz .loop
+  pop  bc
+  ret
+
+
+
+delay_long:
   push hl
   push bc
-  ld   h,0xff
-  ld   l,0xff
-  ld   b,0
-  ld   c,0
+  ld   hl,0x6000
+  ld   bc,00
 .delay_again:
   sbc  hl,bc
   jr   z,.delay_end
