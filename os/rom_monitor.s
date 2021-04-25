@@ -456,13 +456,13 @@ menu_load:
   push hl
   ld   hl, loading_msg
   call printk
-  pop  hl
 
-  ex   de,hl
+  push de
+  pop  hl ; ld hl,de
   call printk
-  ex   de,hl
   call println
   
+  pop  hl
   call loadProgram  ; do actual work
   cp   1
   jr   nz, .ln1
@@ -543,8 +543,8 @@ menu_run:
 menu_cls:
   call displayClearBuffer
   call displayClear
-  ld   a,0
-  ld   (v_cursor),a
+  ld   bc,0
+  ld   (v_cursor),bc
   ret
 
 
@@ -555,6 +555,8 @@ getAddress:
   push de
   pop  hl ; ld hl,de
   call nextToken
+  push hl
+  pop  de ; put the str into de
   ld   a,c
   cp   0 ; no argument given.
   jr   nz,.getadr_start
@@ -1650,6 +1652,7 @@ displayClearBuffer:
   push bc
  ; first clear backing store
   ld   hl,v_screenbuf
+  ld   bc,TOTALCHARS
   ld   c,(TOTALCHARS >> 8) + 1
   ld   b,TOTALCHARS & 0xff
 .nextclear:
@@ -1657,11 +1660,11 @@ displayClearBuffer:
   inc  hl
   djnz .nextclear
   dec  c
+  ld   b,TOTALCHARS & 0xff
   jr   nz,.nextclear
   pop  bc
   pop  hl
   ret
-
 
 displayClear:
   push bc
