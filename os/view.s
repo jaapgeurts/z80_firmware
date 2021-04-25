@@ -36,6 +36,8 @@ ILI_READ_ID4       equ 0xd3
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
+STARTSEC equ 000
+
   org 0x4000
 
   push hl
@@ -43,6 +45,8 @@ DPYHEIGHT equ 320
 
   ld   hl,welcome_msg
   rst  PRINTK
+  
+;  call displayClear
 
 ;   ld   a,0x0B  ; get display status
 ;   out  (TFT_C),a
@@ -90,17 +94,19 @@ viewImage:
   out  (TFT_C),a
 
   ; prepare compact flash read
-  ld   a,'D'
-  rst  PUTC
+; DEBUG SERIAL
+;   ld   a,'D'
+;   rst  PUTC
 
   ld   hl,0 ; start at 0
-  ld   de,0 ; start at 0
+  ld   de,STARTSEC ; start at 0
   ld   b,200 ; = sector count, 512 bytes
   call cfSetBlock
   call cfIssueCommand
 
-  ld   a,'C'
-  rst  PUTC
+; DEBUG SERIAL
+;   ld   a,'C'
+;   rst  PUTC
 
 ; loop 480x320 times = 3 * 200 * 256 * 2
   ld   d,3
@@ -125,6 +131,8 @@ viewImage:
   ld   c,a
   ld   b,200
   call multiply
+  ld   bc,STARTSEC
+  add  hl,bc
   ex   de,hl
   ld   hl,0 ; start at 0
   ld   b,200 ; = sector count, 512 bytes
@@ -263,8 +271,9 @@ initCompactFlash:
   ld   a,0xef
   out  (CF_STATCMD),a ; enable the 8 bit feature
 
-  ld   a,'I'
-  rst  PUTC
+; DEBUG SERIAL
+;   ld   a,'I'
+;   rst  PUTC
 
   ret
 

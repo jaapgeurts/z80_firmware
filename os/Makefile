@@ -25,8 +25,14 @@ testpsg:
 testkbd:
 	vasm -z80asm -Fbin -o testkbd.bin testkbd.s
 
+testkbdread:
+	vasm -z80asm -Fbin -o testkbdread.bin testkbdread.s
+
 testtft:
 	vasm -z80asm -Fbin -o testtft.bin testtft.s
+
+testgetarg:
+	vasm -z80asm -Fbin -o testgetarg.bin testgetarg.s
 
 view:
 	vasm -z80asm -Fbin -o view.bin view.s

@@ -143,7 +143,6 @@ v_background equ v_foreground - 1
 vt_xstart    equ v_background - 2
 vt_ystart    equ vt_xstart - 2
 v_tmp        equ vt_ystart - 2 ; word 
-v_tmp2       equ v_tmp - 2 ; word 
 v_screenbuf  equ 0xF000
 
 ; ring buffer. Lives at 0x100 below the top
@@ -160,8 +159,8 @@ start:
 
   org 0x0008 ; RST 1 getKey
   jp   getKey
-  org 0x0010 ; RST 2 putSerialChar
-  jp   putSerialChar
+  org 0x0010 ; RST 2 putChar
+  jp   putChar
   org 0x0018 ; RST 3 printk
   jp   printk
   org 0x0020 ; RST 4 readline
@@ -178,7 +177,7 @@ INTISR:
   ld   a,0b00111000
   out  (SIO_AC),a
 
-.intisr_check_channel_a
+.intisr_check_channel_a: ; ( main port)
   ld   a, 0b00000000 ; write to WR1. Next byte is RR0
   out  (SIO_AC), a
   in   a,(SIO_AC)
@@ -190,7 +189,7 @@ INTISR:
   call putKey
   jr   .intisr_end
 
-.intisr_check_channel_b
+.intisr_check_channel_b: ; (ps/2 keyboard)
 
   ld   a, 0b00000000 ; write to WR0. Next byte is RR0
   out  (SIO_BC), a
@@ -287,10 +286,10 @@ rom_entry:
   ei
 
 welcome:
-  ld hl,rom_msg
-  call printk
-  ld hl,author_msg
-  call printk
+  ld   hl,rom_msg
+  call prints
+  ld   hl,author_msg
+  call prints
 
   call displayClearBuffer
   call displayClear
@@ -299,9 +298,9 @@ welcome:
   ld   b,7*2
   call setLed
 
-  ld hl,rom_msg
+  ld   hl,rom_msg
   call printd
-  ld hl,author_msg
+  ld   hl,author_msg
   call printd
 
   ld   b,0
@@ -312,19 +311,20 @@ main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
   
-
   call readLine        ; read an input line; result in hl
   call println
 
-  ex   de,hl  ; put stringptr into de
-  ld   a,(de) ; check if user entered a command or just hit enter
-  cp   0
-  jr   z,main_loop
-
 ; get the first argument (this is the command)
-  call getArgument
-  push af ; store af; this is the remainder of the next string
+  call firstToken
+  ld   a,c
+  cp   0
+  jr   z,main_loop ; nothing to do
 
+  push hl ; save str ptr
+  push bc ; save token counters
+
+  push hl
+  pop  de ; ld de,hl
   ld   hl, command_table
 .search_table
   ld   b,0    upper byte of bc
@@ -332,6 +332,8 @@ main_loop:
   ld   a,c
   cp   0      ; if the last byte is a 0, then we reached end of table
   jr   nz,.search_compare
+  inc  sp
+  inc  sp
   inc  sp
   inc  sp ; restore the stack
   ld   hl,error_msg
@@ -355,9 +357,10 @@ main_loop:
   ld   h,(ix+1) ; load func pointer
   ld   l,(ix)
   ld   iy,main_loop ; push return address
-  pop  af
+  pop  bc ; restore token counters
+  pop  de ; the str
   push iy
-  jp   (hl)    ; jump to function pointer; hl is the start of the arg string
+  jp   (hl)  ; jump to function pointer; de is the start of the arg string; hl points to function
 
 menu_help:
   ld   hl, help_msg
@@ -379,68 +382,68 @@ menu_date:
   add  hl,bc
   ld   a,(hl)
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl) ; 1day
   add  '0'
-  call putSerialChar
+  call putChar
   ld   a,'/'
-  call putSerialChar
+  call putChar
   inc  hl
   inc  hl
   inc  hl ; 10 month
   ld   a,(hl)
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl) ; 1 month
   add  '0'
-  call putSerialChar
+  call putChar
   ld   a,'/'
-  call putSerialChar
+  call putChar
   inc  hl
   inc  hl
   inc  hl ; 10 year
   ld   a,(hl)
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl) ; 1 year
   add  '0'
-  call putSerialChar
+  call putChar
   ld   a,' '
-  call putSerialChar
+  call putChar
 
   ld   hl,v_timestruct
   ld   c,5
   add  hl,bc
   ld   a,(hl)  ; 10 hour
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl)  ; 1 hour
   add  '0'
-  call putSerialChar
+  call putChar
   ld   a,':'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl)  ; 10 min
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl)  ; 1 min
   add  '0'
-  call putSerialChar
+  call putChar
   ld   a,':'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl)  ; 10 sec
   add  '0'
-  call putSerialChar
+  call putChar
   dec  hl
   ld   a,(hl)  ; 1 sec
   add  '0'
-  call putSerialChar
+  call putChar
 
   call println
 
@@ -492,9 +495,9 @@ menu_dump:
   ld   b,DUMP_BYTESPERROW    ; 16 bytes per row
   ; print address
   ld   a,'0'
-  call putSerialChar
+  call putChar
   ld   a,'x'
-  call putSerialChar
+  call putChar
   push hl
   ld   a,h
   call printhex
@@ -505,13 +508,13 @@ menu_dump:
 .dump_hex_val:
   ; print value as hex duplets
   ld   a,' '
-  call putSerialChar
+  call putChar
   ld   a,(hl)
   call printhex
   inc  hl
   djnz .dump_hex_val
   ld   a,' '
-  call putSerialChar
+  call putChar
   ld   b,DUMP_BYTESPERROW  
   pop  hl
 .dump_ascii_val:
@@ -520,7 +523,7 @@ menu_dump:
   jr   nc, .printable
   ld   a,'.'
 .printable
-  call putSerialChar
+  call putChar
   inc  hl
   djnz .dump_ascii_val
   call println
@@ -537,21 +540,22 @@ menu_run:
 
   jp    (hl); jump to loaded code with will return
 
-
-; parses an address string into hl
-; input: DE : string
-; returns address in HL
-getAddress:
-  cp   0 ; no argument given.
-  jr   nz,.getarg
-  ld   hl,argerror_msg
-  call printk
-  cp   a ; set zero flag
+menu_cls:
+  call displayClearBuffer
+  call displayClear
+  ld   a,0
+  ld   (v_cursor),a
   ret
 
-.getarg:
-  call nextArgument
-  ld   a,(de)
+
+; parses an address string into hl
+; input: HL : string
+; returns address in HL
+getAddress:
+  push de
+  pop  hl ; ld hl,de
+  call nextToken
+  ld   a,c
   cp   0 ; no argument given.
   jr   nz,.getadr_start
   ld   hl,argerror_msg
@@ -560,12 +564,11 @@ getAddress:
   ret
 
 .getadr_start:
-    ; get first argument
-  call getArgument
-
   push bc
   push de
-  inc de
+  push hl
+  pop  de
+  inc  de
   ; parse it
   ld   a,(de)
   ld   b,a
@@ -746,74 +749,82 @@ printhex_nibble: ; converts a nibble to hex char
   adc  hl,bc
   ld   a,(hl)
 printhex_end:
-  call putSerialChar
+  call putChar
   pop hl
   pop bc
   ret
 
-
-nextArgument:
-; advance the string ptr the end of the string.
-  push af
-  push bc
-  ld   b,0
-  ld   a,(de)
-  inc  a
-  ld   c,a
-  ex   de,hl
-  add  hl,bc
-  ex   de,hl
-  pop  bc
-  pop  af
+; returns first token in hl. Tokens separated by spaces only
+; destructive to string
+; pre:
+;   HL pointer to string
+; post:
+;   HL pointer to first token
+;   B chars remaining in original string after the token
+;   C chars in the current token 
+firstToken:
+  ld   b,(hl)
+  ld   c,0
+getToken: ; do not call directly
+  call skipSpace
+  ; store hl (start of string)
+  push hl
+  call findSpace
+  pop  hl
+  ld   a,c  ; amount
+  ld   (hl),a
   ret
 
-; returns the first word in a string that's marked by spaces on either side
-; DE: str address 
-; A: total remaining length
-; destructive; splits string in substrings.
-; returns A: the remaining total length
-getArgument:
-  push bc
-  push hl
-  push de      ; ld  hl,de
-  pop  hl
+nextToken:
+  push de
   ld   c,0
-  ld   b,a    ; b contains total
-  ; first skip leading spaces
-.next_space
+  ld   d,0
+  ld   e,(hl)
+  add  hl,de
+  inc  hl
+  pop  de
+  call getToken
+  ret
+
+; post:
+;   B returns amount of spaces skipped
+skipSpace:
   ld   a,b
-  cp   0    ; while we're not at the end of the string
-  jr   z,.str_found_end
+  cp   0  ; string is empty
+  ret  z
+.nextSpace
   ; move forward until we discover a letter
+  ld   a,b
+  cp   0  ; while we're not at the end of the string
+  jr   z,.done
   inc  hl
   dec  b
   ld   a,(hl)
   cp   ' ' ; if a space
-  jr   z, .next_space ; found space
-  ld   c,1  ; a letter was found. start counting
-  push hl
-  pop  de  ; ld de,hl
-  dec  de ; de at start of string
-  ; move forward until we discover a letter
-.next_letter
+  jr   z, .nextSpace ; found space
+.done:
+  inc  b
+  dec  hl ; set pointer to start of string
+  ret
+
+; C returns amount of letters skipped
+findSpace:
   ld   a,b
-  cp   0
-  jr   z,.str_found_end
+  cp   0    ; while we're not at the end of the string
+  ret  z ; nothing in the string
+.next_letter:
   ; move forward until we discover a space
+  ld   a,b
+  cp   0  ; while we're not at the end of the string
+  jr   z,.done
   inc  hl
-  dec  b
   inc  c
+  dec  b
   ld   a,(hl)
   cp   ' ' ; if not a space
   jr   nz, .next_letter ; found space
   dec  c
-.str_found_end:
-  ld   a,c
-  ld   (de),a
-  ld   a,b ; a should contain how many letters left
-.nextarg_end:
-  pop  hl
-  pop  bc
+.done:
   ret
   
 RTCInit:
@@ -903,17 +914,17 @@ readLine: ; result in input_buf & hl
   cp   0
   jr   z,.read_line_again ; at the beginning -> do nothing
   ld   a,BS  ; put the cursor one back
-  call putSerialChar
+  call putChar
   ld   a,' '  ; erase the char from the screen
-  call putSerialChar
+  call putChar
   ld   a,BS   ; put the cursor one back
-  call putSerialChar
+  call putChar
   dec  b   ; one less char in the string
   dec  de
   jr   .read_line_again
 .if_not_bs:
-  call putSerialChar
   ld   (de), a    ; input_buf[b] = a
+  call putChar
   inc  de  ; next char
   inc  b  ; one more char in the string
   ; TODO: check for buffer overruns
@@ -928,14 +939,22 @@ readLine: ; result in input_buf & hl
 
 println:
   ld   a,CR
-  call putSerialChar
+  call putChar
   ld   a,LF
-  call putSerialChar
+  call putChar
   ret
 
 
 ; hl = source address
 printk: ; print kernel message to serial (uses pascal strings)
+
+  ; TODO: check if serial is enabled
+  call prints; print to serial
+
+  call printd; print to display
+  ret
+
+prints:
   push hl
   push bc
   ld   b,(hl)
@@ -1043,6 +1062,73 @@ putKey:
   ld   l,a
   ld   (keyb_buf_wr),hl
 .putKey_end:
+  pop  bc
+  pop  de
+  pop  hl
+  ret
+
+putChar:
+  push af
+  call putSerialChar
+  pop  af
+  call putDisplayChar
+  ret
+
+; print char to lcd
+putDisplayChar: 
+  push hl
+  push de
+  push bc
+
+  ld   hl,v_screenbuf
+  ld   de,(v_cursor)
+  add  hl,de
+ 
+  cp   BS
+  jr   nz,.checkCR
+  ; handle BS - remove previous char
+  ; TODO: make sure de != 0
+  dec  de
+  ld   (v_cursor),de
+  jr   .end_nodraw
+
+.checkCR:
+  cp   CR
+  jr   nz,.checkLF
+  ; recalculate the cursor position
+  ld   c,COLS
+  push de
+  ex   de,hl ; put cursor in hl
+  call division ; a = remainder
+  scf
+  ccf ; clear carry flag
+  ld   b,0
+  ld   c,a
+  pop  hl
+  sbc  hl,bc
+  ld   (v_cursor),hl
+  jr   .end_nodraw
+
+.checkLF:
+  cp   LF
+  jr   nz,.placeChar
+  ;   line feed
+  ld   hl,COLS
+  add  hl,de ; TODO: scroll screen if de > 1200
+  ld   (v_cursor),hl
+  jr   .end_nodraw
+
+.placeChar
+  push de  ; store start location
+  ld   (hl),a
+  inc  de
+  ld   (v_cursor),de
+
+  pop  bc ; load original cursor back
+  ; update screen
+  ; TODO: scroll screen when necessary
+  call displayRepaint ; bc start; de end
+.end_nodraw:
   pop  bc
   pop  de
   pop  hl
@@ -1159,8 +1245,6 @@ handleKeyboard:
   ; if larger than 80; just store it otherwise translate
   cp   0x80
   jr   nc, .store
-
-.read_kbd_make:
   push af
   cp   L_SHIFT
   jr   z,.read_kbd_set_shifted:
@@ -1259,6 +1343,7 @@ delay1:
 ;  in   a,(TFT_D)
 ;  call printhex
 
+; TODO: reduce by writing a loop and sending data from an array
   ld   a,ILI_DPY_OFF  ; dpy off
   out  (TFT_C),a
 
@@ -1277,7 +1362,7 @@ delay1:
    
   ld   a,ILI_MEM_ACCESS_CTL     ; set address mode
   out  (TFT_C),a
-  ld   a,0b00101000
+  ld   a,0b00100000
 ;  ld   a,0b00000000
   out   (TFT_D),a
 
@@ -1305,8 +1390,8 @@ printd: ; push it into the buffer; then redraw the screen
   push bc
   push de
 
-  ld  de,(v_cursor) ; remember start pos
-  ld  (v_tmp),de
+  ld   de,(v_cursor) ; remember start pos
+  ld   (v_tmp),de
 
   ; add cursor index  to screenbuf start
   push hl
@@ -1315,19 +1400,20 @@ printd: ; push it into the buffer; then redraw the screen
   ex   de,hl
   pop  hl
 
-  ; calculate end position
-  ld   b,0
-  ld   c,(hl)
-  push hl
-  ld   hl,(v_cursor)
-  add  hl,bc
-  ld   (v_tmp2),hl
-  pop  hl
+;   ; calculate end position
+;   ld   b,0
+;   ld   c,(hl)
+;   push hl
+;   ld   hl,(v_cursor)
+;   add  hl,bc
+;   ld   (v_tmp2),hl
+;   pop  hl
 
   ld   b,(hl)
 .printd_loop:
   inc  hl
   ld   a, (hl)
+
   ; check for CR and LF
   cp   CR
   jr   nz, .checkLF
@@ -1374,8 +1460,7 @@ printd: ; push it into the buffer; then redraw the screen
   ld   (v_cursor),hl
 
   ld   bc,(v_tmp)
-  ; end is start + length of str
-  ld   de,(v_tmp2)
+  ld   de,(v_cursor)
 
   call displayRepaint
 
@@ -1621,7 +1706,7 @@ setLed:
   out  (PSG_DATA),a
   ret
 
-rom_msg:          db 22,"Z80 ROM Monitor v0.3",CR,LF
+rom_msg:          db 22,"Z80 ROM Monitor v0.4",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 help_msg:         db 66,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>",CR,LF
 halted_msg:       db 13,"System halted"
@@ -1649,7 +1734,9 @@ cmd_date:    db 4,"date"
              dw menu_date
 cmd_run:     db 3,"run"
              dw menu_run
-cmd_tab_end: db    0
+cmd_cls:     db 3,"cls"
+             dw menu_cls
+cmd_tab_end: db 0
 
     
 
