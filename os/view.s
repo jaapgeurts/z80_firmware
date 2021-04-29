@@ -15,7 +15,7 @@ CR equ 0x0D
 LF equ 0x0A
 
 GETC     equ 0x0008 ; RST 1 getKey
-PUTC     equ 0x0010 ; RST 2 putSerialChar
+PUTC     equ 0x0010 ; RST 2 putChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
@@ -36,9 +36,9 @@ ILI_READ_ID4       equ 0xd3
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
-STARTSEC equ 000
+STARTSEC equ 600
 
-  org 0x4000
+  org 0x5000
 
   push hl
   push bc
@@ -64,6 +64,9 @@ STARTSEC equ 000
   call initCompactFlash
 
   call viewImage
+
+
+  rst  READLINE ; read line to wait for key press
 
   ld   hl,done_msg
   rst  PRINTK

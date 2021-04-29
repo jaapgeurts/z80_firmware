@@ -146,15 +146,40 @@ delay2:
   ld   hl,welcome_msg
   call printd
 
-  ld   hl,anotherline
-  call printd
-
   ld   hl,lorumipsum
   call printd
 
+  ld   hl,text1
+  call printd
+  ld   hl,text2
+  call printd
+  ld   hl,text3
+  call printd
 
-  ;call displayScrollLastLine
+  ;call displayScrollBuffer
+;  call displayScrollBuffer
+;  call displayScrollBuffer
 
+;   push bc
+;   ld   bc,0
+;   ld   de,TOTALCHARS
+;   call displayRepaint
+;   pop  bc
+
+;  ld   hl,text4
+;  call printd
+;   ld   hl,text5
+;   call printd
+;   ld   hl,text6
+;   call printd
+;   ld   hl,text7
+;   call printd
+;   ld   hl,text8
+;   call printd
+
+  ld   hl, prompt_msg     ; print the prompt
+  call printd
+  
   pop  bc
   pop  hl
   ret
@@ -168,20 +193,11 @@ printd: ; push it into the buffer; then redraw the screen
   ld  de,(v_cursor) ; remember start pos
   ld  (v_tmp),de
 
-  ; add cursor index  to screenbuf start
+  ; add cursor index to screenbuf start
   push hl
   ld   hl,v_screenbuf
   add  hl,de
-  ex   de,hl
-  pop  hl
-
-  ; calculate end position
-  ld   b,0
-  ld   c,(hl)
-  push hl
-  ld   hl,(v_cursor)
-  add  hl,bc
-  ld   (v_tmp2),hl
+  ex   de,hl  ; de contains screen_buf ptr
   pop  hl
 
   ld   b,(hl)
@@ -213,11 +229,45 @@ printd: ; push it into the buffer; then redraw the screen
 .checkLF:
   cp   LF
   jr   nz,.storeChar
-  push hl
+
+  push hl ; store the str pointer
+
+  push de ; store screen_buf ptr
+  pop  ix
+
   ld   hl,COLS
-  add  hl,de ; TODO: scroll screen if de > 1200
-  ex   de,hl
-  pop  hl
+  add  hl,de 
+  ex   de,hl  ;push result back into de (screen_buf ptr)
+
+  scf
+  ccf
+  ; check if screen if de > 1200 then scroll
+  ld   hl, (v_screenbuf+TOTALCHARS)
+  sbc  hl,de
+  ; hl contains result
+  jp   p,.noscroll 
+
+  ; subtract COLS from screen_buf ptr
+;   scf
+;   ccf
+;   ex   de,hl
+;   ld   hl,COLS
+;   sbc  hl,de
+;   ex   de,hl
+
+  call displayScrollBuffer
+
+  push bc
+  ld   bc,0
+  ld   de,TOTALCHARS
+  call displayRepaint
+  pop  bc
+
+  push  ix
+  pop   de ; restore original cursor location
+
+.noscroll:
+  pop  hl ; restore the str pointer
   jr   .endif
 .storeChar:
   ld   (de),a
@@ -232,10 +282,10 @@ printd: ; push it into the buffer; then redraw the screen
   ex   de,hl ; 
   sbc  hl,de
   ld   (v_cursor),hl
+  ex   de,hl ; de contains end location
 
   ld   bc,(v_tmp)
-  ; end is start + length of str
-  ld   de,(v_tmp2)
+;  ld   de,(v_cursor)
 
   call displayRepaint
 
@@ -254,7 +304,7 @@ displayRepaint:
   ; draw from start(bc) to end(de)
   ld   hl,v_screenbuf
   add  hl,de ; save end location
-  ld   (v_tmp),hl
+  ld   (v_tmp2),hl
 
   ; calculate startx = (start%60 ) * fontw
   ; calculate starty = (start/60) * fonth
@@ -353,7 +403,7 @@ displayRepaint:
   
   ; done with the glyph. goto next cell
   inc  bc   ; if bc < 1200 continue at .incxy
-  ld   de,(v_tmp)
+  ld   de,(v_tmp2)
   ld   a,b
   cp   d
   jr   nz,.incxy
@@ -518,32 +568,62 @@ displayClearBuffer:
   push bc
  ; first clear backing store
   ld   hl,v_screenbuf
-  ld   c,(TOTALCHARS >> 8) + 1
-  ld   b,TOTALCHARS & 0xff
+  ld   bc,TOTALCHARS
 .nextclear:
   ld   (hl),0
   inc  hl
-  djnz .nextclear
-  dec  c
+  dec  bc
+  ld   a,b
+  or   c
   jr   nz,.nextclear
   pop  bc
   pop  hl
   ret
 
-displayScrollLastLine:
-  ld   a,ILI_DPY_VSSA ; start vertical scrolling
-  out  (TFT_C),a
-  ld   a,0
-  out  (TFT_D),a
-  ld   a,FONTH
-  out  (TFT_D),a
+displayScrollBuffer:
+  push hl
+  push bc
+  push de
 
+  ld   bc,TOTALCHARS - COLS
+  ld   de,v_screenbuf
+  ld   hl,v_screenbuf+COLS
+.dpyLoopScroll:
+  ld   a,(hl)
+  ld   (de),a
+  inc  hl
+  inc  de
+  dec  bc
+  ld   a,b
+  or   c
+  jr   nz,.dpyLoopScroll
+
+; clear last line
+  ld   b,COLS
+  ld   hl,v_screenbuf+TOTALCHARS-COLS
+.dpyLoopEmpty
+  ld   (hl),0
+  inc  hl
+  djnz .dpyLoopEmpty
+
+  pop  de
+  pop  bc
+  pop  hl
+  ret
 
 welcome_msg:   db 18,"TFT Display test",CR,LF
 hexconv_table: db "0123456789ABCDEF"
-lorumipsum:    db 254,"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc i",CR,LF
-lorumipsum2:   db 35,"Lorem ipsum dolor sit amet, conse",CR,LF
-anotherline:   db 30,"This is another line of text",CR,LF
+lorumipsum:    db 254,"1.rem ipsum dolor sit amet, consectetur adipiscing elit. Praesent placerat consequat bibendum. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Sed ante urna, interdum at diam a, vulputate consectetur lorem. Nunc i",CR,LF
+lorumipsum2:   db 35,"2.rem ipsum dolor sit amet, conse",CR,LF
+text1:         db 97,"3.naf 26 mei hoeven reizigers die tussen Hongkong en Singapore reizen niet meer in quarantaine.",CR,LF
+text2:         db 109,"4. twee regeringen zijn tot dit plan gekomen omdat ze het toerisme tussen de twee steden willen stimuleren.",CR,LF
+text3:         db 117,"5. moeten ze twee weken voor hun vertrek volledig gevaccineerd zijn en de lokale corona-app op hun telefoon hebben.",CR,LF
+text4:         db 105,"6. notulen van discussies binnen het kabinet over de toeslagenaffaire worden vanavond openbaar gemaakt.",CR,LF
+text5:         db 154,"7.t demissionaire kabinet zet deze zeer ongewone stap naar aanleiding van de ophef over een reconstructie waar RTL Nieuws vorige week woensdag mee kwam.",CR,LF
+text6:         db 116,"8.lgens RTL heeft het kabinet Rutte III doelbewust informatie achtergehouden waar de Tweede Kamer om had gevraagd.",CR,LF
+text7:         db 82,"9. Kamer eiste opheldering, een deel vroeg ook om openbaarmaking van de notulen.",CR,LF
+text8:         db 79,"10.te sprak vrijdag van een uitzonderlijk besluit, dat ook eenmalig zal zijn.",CR,LF
+prompt_msg:    db 2,"> "
 
 allletters:
 allletters_08x16:

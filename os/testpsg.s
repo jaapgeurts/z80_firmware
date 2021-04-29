@@ -28,7 +28,9 @@ PSG_ENABLE  equ 7
 PSG_PORTA   equ 14
 PSG_PORTB   equ 15
 
+ 
   org 0x8000
+
   push hl
   push bc
 
@@ -170,5 +172,10 @@ delay_long:
   pop  hl
   ret
 
+    welcome_msg: db 14,"PSG test app",CR,LF
 
-welcome_msg: db 14,"PSG test app",CR,LF
+  dsect
+  org 0xff00
+  var1: db 0
+  var2: db 1
+  dend

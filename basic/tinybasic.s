@@ -39,13 +39,7 @@
 ; to me in your work. And please, distribute freely.
 ;*************************************************************
 
-SerialPort	EQU	40H		;This is for your I/0
 
-CTC_A EQU 0x00
-SIO_AD EQU 0x40
-SIO_BD EQU 0x41
-SIO_AC EQU 0x42
-SIO_BC EQU 0x43
 
 SPACE           EQU     020H            ; Space
 TAB             EQU     09H             ; HORIZONTAL TAB
@@ -97,7 +91,7 @@ DWA MACRO
         DB   \1 & 0FFH
         ENDM
 
-        ORG  0000H
+        ORG  2000H
 
 START:
         LD SP,STACK                     ;*** COLD START ***
@@ -115,7 +109,7 @@ CRLF:
 RST10:  PUSH AF                         ;*** OUTC OR RST 10H ***
         LD A,(OCSW)                     ;PRINT CHARACTER ONLY
         OR A                            ;IF OCSW SWITCH IS ON
-        JP OUTC				;REST OF THIS AT OUTC
+        JP OUTC				            ;REST OF THIS AT OUTC
 
 RST18:  CALL EXPR2                      ;*** EXPR OR RST 18H ***
         PUSH HL                         ;EVALUATE AN EXPRESSION

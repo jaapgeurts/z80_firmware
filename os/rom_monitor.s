@@ -3,11 +3,9 @@
 ; Date: 2021-02-01
 ;
 
-;rc2014=1
-sea80=1
-
-DUMP_ROWCOUNT    equ 0x08 ; 8 rows
-DUMP_BYTESPERROW equ 0x10 ; 16 bytes per row
+; ***********************
+; *** PORT IO MAPPING ***
+; ***********************
 
 ; IO peripheral port definitions
 ; CTC ports
@@ -17,33 +15,24 @@ CTC_C equ 0x02
 CTC_D equ 0x03
 
 ; RTC ports
-  ifdef sea80
-RTC    equ 0x20
-RTC_CD  equ RTC+0x0d
-RTC_CE  equ RTC+0x0e
-RTC_CF  equ RTC+0x0f
-  endif
+RTC           equ 0x20
+RTC_CD        equ RTC+0x0d
+RTC_CE        equ RTC+0x0e
+RTC_CF        equ RTC+0x0f
+RTC_REG_COUNT equ 0x0d
+
 ; 16 more registers up to 0x2F
 
 ; SIO ports 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
-  ifdef sea80
 SIO_AD equ 0x40
 SIO_AC equ 0x42
-  endif
 
 ; PIO ports
 PIO_AC equ 0x60
 
-; SIO for RC2014
-  ifdef rc2014
-SIO_AC equ 0x80
-SIO_AD equ 0x81
-  endif
-
 ; PSG ports
-  ifdef sea80
 PSG_REG equ 0x80
 PSG_DATA equ 0x81
 
@@ -63,12 +52,13 @@ PSG_ENABLE  equ 7
 PSG_PORTA   equ 14
 PSG_PORTB   equ 15
 
-  endif
-
 ; TFT display
-  ifdef sea80
 TFT_C equ 0xA0
 TFT_D equ 0xA1
+
+; *********************
+; *** DPY REGISTERS ***
+; *********************
 
 ILI_WAKEUP         equ 0x11
 ILI_DPY_NORMAL     equ 0x13
@@ -91,22 +81,19 @@ ILI_READ_ID4       equ 0xd3
 FONTW equ 8
 FONTH equ 16
 BYTESPERFONT equ (FONTW * FONTH) / 8
-COLS equ 60
-ROWS equ 20
+COLS equ DPYWIDTH / FONTW
+ROWS equ DPYHEIGHT / FONTH
 TOTALCHARS equ COLS * ROWS
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
+SCROLL_LINES equ COLS*4
 
-  endif
+; *****************
+; *** CONSTANTS ***
+; *****************
 
-; constants
-STACK_TOP          equ 0xFFFF
-STACK_SIZE         equ 0x80 ; 128 bytes
-VAR_TOP            equ STACK_TOP - STACK_SIZE
-SER_BUF_TOP        equ 0xFF00
-SER_BUF_SIZE       equ 0x20
-READLINE_BUF_SIZE  equ 0x40 ; 64 chars
-RTC_REG_COUNT      equ 0x0d
+DUMP_ROWCOUNT    equ 0x10 ; 16 rows
+DUMP_BYTESPERROW equ 0x08 ; 8 bytes per row
 
 ; keyboard codes 
 L_SHIFT equ 0x12
@@ -128,26 +115,49 @@ LED1 equ 0x02
 LED2 equ 0x04
 LED3 equ 0x08
 
-;ram variables; first 128 bytes for the stack
-; next 128 bytes for general variables
-readline_buf equ VAR_TOP - READLINE_BUF_SIZE ; 64 bytes for the readline buffer
-                                    ; 64 bytes for the rest
-v_shifted    equ readline_buf - 1 ; shift keystate
-v_cursor equ  v_shifted - 2  ; word
-keyb_buf_wr  equ v_cursor - 2     ; write index
-keyb_buf_rd  equ keyb_buf_wr - 2  ; read index
-v_timestruct equ keyb_buf_rd - RTC_REG_COUNT ; time structure
 
-v_foreground equ v_timestruct - 1
-v_background equ v_foreground - 1
-vt_xstart    equ v_background - 2
-vt_ystart    equ vt_xstart - 2
-v_tmp        equ vt_ystart - 2 ; word 
-v_screenbuf  equ 0xF000
+; *****************
+; *** VARIABLES ***
+; *****************
 
-; ring buffer. Lives at 0x100 below the top
-keyb_buf     equ SER_BUF_TOP - SER_BUF_SIZE; // 32 bytes keyboard ring buffer
+; constants
+STACK_SIZE         equ 0x80 ; 128 bytes = 64 words
+SER_BUF_SIZE       equ 0x20
+READLINE_BUF_SIZE  equ 0x40 ; 64 chars
+SCREEN_PTR_MASK_H  equ 0x07 ; high byte for anding: loc -> cursor
+SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc  
 
+; variables
+  dsect
+  
+  org  0xF000
+    ; display
+    v_screenbuf:  dc TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
+    v_cursor:     dw 0 ; from 0-TOTALCHARS
+    vt_xstart:    dw 0
+    vt_ystart:    dw 0
+    v_foreground: db 0
+    v_background: db 0
+  
+  org  0xff00
+    ; keyboard
+    keyb_buf:     dc SER_BUF_SIZE; // 32 bytes keyboard ring buffer ; must be aligned to 256 bit addres
+    keyb_buf_wr:  dw 0  ; write index
+    keyb_buf_rd:  dw 0  ; read index
+    v_shifted:    db 0 ; shift keystate
+    readline_buf: dc READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
+    ; real time clock
+    v_timestruct: dc RTC_REG_COUNT ; time structure
+    ; temporary vars
+    v_tmp:        dw 0
+    v_tmp2:       dw 0
+    STACK_BOTTOM: ; bottom of the stack
+  org  0xFFFF
+    STACK_TOP:
+  dend
+
+  assert STACK_TOP == 0xFFFF
+  assert STACK_BOTTOM + STACK_SIZE <= STACK_TOP
 
 ; rst jump table
 
@@ -490,9 +500,9 @@ menu_dump:
   jr   z, .dump_end
 
   ; do work
-  ld   c,DUMP_ROWCOUNT    ; 8 rows maximum
+  ld   c,DUMP_ROWCOUNT    ; 16 rows maximum
 .dump_row:
-  ld   b,DUMP_BYTESPERROW    ; 16 bytes per row
+  ld   b,DUMP_BYTESPERROW    ; 8 bytes per row
   ; print address
   ld   a,'0'
   call putChar
@@ -537,8 +547,7 @@ menu_dump:
 menu_run:
   call getAddress
   ret  z   ; result in hl, str in de
-
-  jp    (hl); jump to loaded code with will return
+  jp   (hl); jump to loaded code with will return
 
 menu_cls:
   call displayClearBuffer
@@ -1032,7 +1041,7 @@ getKey:
   ld   a,e
   and  SER_BUF_SIZE-1
   ld   e,a
-  ld  (keyb_buf_rd),de ; pointer pointer back into mem
+  ld  (keyb_buf_rd),de ; write pointer back into mem
   pop  af
 .getKey_end:
   ei
@@ -1044,6 +1053,7 @@ putKey:
   push hl
   push de
   push bc
+  di
   ld   b,a
   ; begin
   ld   hl,(keyb_buf_wr)
@@ -1064,6 +1074,7 @@ putKey:
   ld   l,a
   ld   (keyb_buf_wr),hl
 .putKey_end:
+  ei
   pop  bc
   pop  de
   pop  hl
@@ -1077,14 +1088,13 @@ putChar:
   ret
 
 ; print char to lcd
+; char in A
 putDisplayChar: 
   push hl
   push de
   push bc
 
-  ld   hl,v_screenbuf
   ld   de,(v_cursor)
-  add  hl,de
  
   cp   BS
   jr   nz,.checkCR
@@ -1102,8 +1112,7 @@ putDisplayChar:
   push de
   ex   de,hl ; put cursor in hl
   call division ; a = remainder
-  scf
-  ccf ; clear carry flag
+  or   a ; clear carry flag
   ld   b,0
   ld   c,a
   pop  hl
@@ -1116,20 +1125,38 @@ putDisplayChar:
   jr   nz,.placeChar
   ;   line feed
   ld   hl,COLS
-  add  hl,de ; TODO: scroll screen if de > 1200
-  ld   (v_cursor),hl
+  add  hl,de 
+  ex   de,hl
+  call checkScrollCursor ; scroll screen if de > 1200
+  ld   (v_cursor),de
   jr   .end_nodraw
 
 .placeChar
   push de  ; store start location
-  ld   (hl),a
+  push de
+  pop  hl ; ld   hl,de
+  ; add cursor index to screenbuf start
+  ld   c,a ; store char
+  ld   a,h
+  or   SCREEN_BASE_MASK_H
+  ld   h,a
+  ld   (hl),c ; save char
   inc  de
-  ld   (v_cursor),de
 
+  call checkScrollCursor
+
+  ld   (v_cursor),de
   pop  bc ; load original cursor back
+
+  or  a ; clear carry
+  ld  hl,(v_cursor)
+  sbc hl,bc
+  jr  z,.end_nodraw
+  jp  m,.end_nodraw ; TODO: why is start after the end?
+  
   ; update screen
-  ; TODO: scroll screen when necessary
   call displayRepaint ; bc start; de end
+
 .end_nodraw:
   pop  bc
   pop  de
@@ -1387,35 +1414,25 @@ delay2:
   ret
 
 
-printd: ; push it into the buffer; then redraw the screen
+; push the string into the buffer; then redraw the screen
+; string in hl
+printd: 
   push hl
   push bc
   push de
 
-  ld   de,(v_cursor) ; remember start pos
-  ld   (v_tmp),de
+  ld  de,(v_cursor) ; remember start pos
+  ld  (v_tmp),de
 
-  ; add cursor index  to screenbuf start
-  push hl
-  ld   hl,v_screenbuf
-  add  hl,de
-  ex   de,hl
-  pop  hl
+  ; add cursor index to screenbuf start
+  ld   a,d
+  or   SCREEN_BASE_MASK_H
+  ld   d,a
 
-;   ; calculate end position
-;   ld   b,0
-;   ld   c,(hl)
-;   push hl
-;   ld   hl,(v_cursor)
-;   add  hl,bc
-;   ld   (v_tmp2),hl
-;   pop  hl
-
-  ld   b,(hl)
+  ld   b,(hl) ; load counter
 .printd_loop:
   inc  hl
   ld   a, (hl)
-
   ; check for CR and LF
   cp   CR
   jr   nz, .checkLF
@@ -1425,7 +1442,11 @@ printd: ; push it into the buffer; then redraw the screen
   push bc ; store the str index counter
   push de ; ld hl,de
   pop  hl ; hl contains the v_cursor
-  ; TODO: mask off alignment instead of division
+  
+  ld   a,h ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   h,a
+
   ld   c,COLS
   call division ; a = remainder
   scf
@@ -1441,36 +1462,110 @@ printd: ; push it into the buffer; then redraw the screen
 .checkLF:
   cp   LF
   jr   nz,.storeChar
-  push hl
+
+  push hl ; store the str pointer
+
+  ; add cols to cursor (= LF)
   ld   hl,COLS
-  add  hl,de ; TODO: scroll screen if de > 1200
-  ex   de,hl
-  pop  hl
+  add  hl,de 
+  ex   de,hl  ;push result back into de (screen_buf ptr)
+
+
+  call checkScrollBuffer
+
+  pop  hl ; restore the str pointer
   jr   .endif
 .storeChar:
   ld   (de),a
   inc  de
+  call checkScrollBuffer
 .endif:
   djnz .printd_loop
 
   ; subtract screenbuf
-  scf
-  ccf
-  ld   hl,v_screenbuf
-  ex   de,hl ; 
+  ld   a,d ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   d,a
+  ld   (v_cursor),de
+  
+  ; if both are same, then don't paint
+  ; TODO: bugfix for CR
+  ld   hl,(v_tmp)
   sbc  hl,de
-  ld   (v_cursor),hl
+  jr   z,.skippaint
 
   ld   bc,(v_tmp)
-  ld   de,(v_cursor)
-
+;  ld   de,(v_cursor)
   call displayRepaint
-
+.skippaint:
   pop  de
   pop  bc
   pop  hl
 
   ret
+
+checkScrollCursor:
+  push hl
+  push bc
+
+  or   a ; clear carry
+  ; check if screen if de > 1200 then scroll
+  ld   hl, TOTALCHARS-1
+  sbc  hl,de
+  ; hl contains result
+  jp   p,.noscroll 
+
+  call displayScrollBuffer
+
+  push de
+  ld   bc,0
+  ld   de,TOTALCHARS
+  call displayRepaint
+  pop  de
+
+  ; subtract COLS from de
+  or   a ; clear carry
+  ld   hl,SCROLL_LINES
+  ex   de,hl
+  sbc  hl,de
+  ex   de,hl
+
+.noscroll:
+  pop  bc
+  pop  hl
+  ret 
+
+; TODO: there are two versions; check if we can merge
+checkScrollBuffer:
+  push hl
+  push bc
+
+  or   a ; clear carry
+  ; check if screen if de >= 1200 then scroll
+  ld   hl, (v_screenbuf+TOTALCHARS)-1
+  sbc  hl,de
+  ; hl contains result
+  jp   p,.noscroll 
+
+  call displayScrollBuffer
+
+  push de
+  ld   bc,0
+  ld   de,TOTALCHARS
+  call displayRepaint
+  pop  de
+
+  ; subtract COLS from de
+  or   a ; clear carry
+  ld   hl,SCROLL_LINES
+  ex   de,hl
+  sbc  hl,de
+  ex   de,hl
+
+.noscroll:
+  pop  bc
+  pop  hl
+  ret 
 
 ; bc: start, de: end
 displayRepaint:
@@ -1481,7 +1576,7 @@ displayRepaint:
   ; draw from start(bc) to end(de)
   ld   hl,v_screenbuf
   add  hl,de ; save end location
-  ld   (v_tmp),hl
+  ld   (v_tmp2),hl
 
   ; calculate startx = (start%60 ) * fontw
   ; calculate starty = (start/60) * fonth
@@ -1502,7 +1597,9 @@ displayRepaint:
   ld   c,FONTH
   call multiply ; result in hl
   ld   (vt_ystart),hl
+  
   ; go through the array. if dirty draw
+
   pop  bc
   ld   hl,v_screenbuf
   add  hl,bc
@@ -1580,7 +1677,7 @@ displayRepaint:
   
   ; done with the glyph. goto next cell
   inc  bc   ; if bc < 1200 continue at .incxy
-  ld   de,(v_tmp)
+  ld   de,(v_tmp2)
   ld   a,b
   cp   d
   jr   nz,.incxy
@@ -1653,14 +1750,12 @@ displayClearBuffer:
  ; first clear backing store
   ld   hl,v_screenbuf
   ld   bc,TOTALCHARS
-  ld   c,(TOTALCHARS >> 8) + 1
-  ld   b,TOTALCHARS & 0xff
 .nextclear:
   ld   (hl),0
   inc  hl
-  djnz .nextclear
-  dec  c
-  ld   b,TOTALCHARS & 0xff
+  dec  bc
+  ld   a,b
+  or   c
   jr   nz,.nextclear
   pop  bc
   pop  hl
@@ -1697,6 +1792,37 @@ displayClear:
   pop  hl
   pop  de
   pop  bc
+  ret
+
+displayScrollBuffer:
+  push hl
+  push bc
+  push de
+
+  ld   bc,TOTALCHARS - SCROLL_LINES ; scroll quarter of the screen
+  ld   de,v_screenbuf
+  ld   hl,v_screenbuf+SCROLL_LINES
+.dpyLoopScroll:
+  ld   a,(hl)
+  ld   (de),a
+  inc  hl
+  inc  de
+  dec  bc
+  ld   a,b
+  or   c
+  jr   nz,.dpyLoopScroll
+
+; clear last line
+  ld   b,SCROLL_LINES
+  ld   hl,v_screenbuf+TOTALCHARS-SCROLL_LINES
+.dpyLoopEmpty
+  ld   (hl),0
+  inc  hl
+  djnz .dpyLoopEmpty
+
+  pop  de
+  pop  bc
+  pop  hl
   ret
 
 ; b led value
@@ -2041,11 +2167,7 @@ letter252:    db 0x00,0xd8,0x6c,0x6c,0x6c,0x6c,0x6c,0x00,0x00,0x00,0x00,0x00,0x0
 letter253:    db 0x00,0x70,0xd8,0x30,0x60,0xc8,0xf8,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 'ý'
 letter254:    db 0x00,0x00,0x00,0x00,0x7e,0x7e,0x7e,0x7e,0x7e,0x7e,0x7e,0x00,0x00,0x00,0x00,0x00 ; 'þ'
 letter255:    db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 'ÿ'
-  
-  ifdef sea80
+
+; align code to 8192 bytes
   org 0x2000
-  endif
-  ifdef rc2014
-  org 0x4000
-  endif
 
