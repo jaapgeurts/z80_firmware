@@ -28,37 +28,35 @@ NC  /CFS /TFTS /PIOS /RTCS  BC1 BDIR /SIOS /CTCS VCC
 
 
 ; CTC at address IO 0x00
-CTCS = IORQ * RD * /A7 * /A6 * /A5
-     + IORQ * WR * /A7 * /A6 * /A5
+CTCS = IORQ * RD * /A7 * /A6 * /A5 * /M1
+     + IORQ * WR * /A7 * /A6 * /A5 * /M1
 
 ; Realtime Clock at address IO 0x20
-RTCS = IORQ * RD * /A7 * /A6 * A5
-     + IORQ * WR * /A7 * /A6 * A5
+RTCS = IORQ * RD * /A7 * /A6 * A5 * /M1
+     + IORQ * WR * /A7 * /A6 * A5 * /M1
 
 ; SIO/0 at address IO 0x40
-SIOS = IORQ * RD * /A7 * A6 * /A5
-     + IORQ * WR * /A7 * A6 * /A5
+SIOS = IORQ * RD * /A7 * A6 * /A5 * /M1
+     + IORQ * WR * /A7 * A6 * /A5 * /M1
 
 ; PIO at address IO 0x60
-PIOS = IORQ * RD * /A7 * A6 * A5
-     + IORQ * WR * /A7 * A6 * A5
+PIOS = IORQ * RD * /A7 * A6 * A5 * /M1
+     + IORQ * WR * /A7 * A6 * A5 * /M1
 
 ; AY-8910 at 0x80
-BDIR = IORQ * WR * A7 * /A6 * /A5 * A0 ; write data 0x81
-     + IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
-BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 ; read data 0x81
-    +  IORQ * WR * A7 * /A6 * /A5 * /A0  ; write reg 0x80
-
-
+BDIR = IORQ * WR * A7 * /A6 * /A5 * A0 * /M1 ; write data 0x81
+     + IORQ * WR * A7 * /A6 * /A5 * /A0 * /M1  ; write reg 0x80
+BC1 =  IORQ * RD * A7 * /A6 * /A5 * A0 * /M1 ; read data 0x81
+    +  IORQ * WR * A7 * /A6 * /A5 * /A0 * /M1  ; write reg 0x80
 
 ; TFT display at 0xA0
 
-TFTS = IORQ * WR * A7 * /A6 * A5
-     + IORQ * RD * A7 * /A6 * A5
+TFTS = IORQ * WR * A7 * /A6 * A5 * /M1
+     + IORQ * RD * A7 * /A6 * A5 * /M1
 
 ; Compact flash at 0xC0
-CFS = IORQ * WR * A7 * A6 * /A5
-    + IORQ * RD * A7 * A6 * /A5
+CFS = IORQ * WR * A7 * A6 * /A5 * /M1
+    + IORQ * RD * A7 * A6 * /A5 * /M1
 
 
 DESCRIPTION

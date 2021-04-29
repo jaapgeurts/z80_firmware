@@ -11,6 +11,8 @@ CF_LBA3    equ 0xC6
 CF_STATCMD equ 0xC7
 
 
+
+
 CR equ 0x0D
 LF equ 0x0A
 
@@ -36,15 +38,30 @@ ILI_READ_ID4       equ 0xd3
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
-STARTSEC equ 600
+
 
   org 0x5000
 
   push hl
   push bc
+  push de
 
   ld   hl,welcome_msg
   rst  PRINTK
+
+  ld   hl,oneortwo_msg
+  rst  PRINTK
+  rst  READLINE
+
+  inc  hl
+  ld   a,(hl)
+  sub  '0'
+  
+  ld   de,600
+  call multiply16
+  ld   (STARTSEC),hl
+
+.skipsetsec:
   
 ;  call displayClear
 
@@ -65,12 +82,9 @@ STARTSEC equ 600
 
   call viewImage
 
-
   rst  READLINE ; read line to wait for key press
 
-  ld   hl,done_msg
-  rst  PRINTK
-
+  pop  de
   pop  bc
   pop  hl
   ret
@@ -102,7 +116,7 @@ viewImage:
 ;   rst  PUTC
 
   ld   hl,0 ; start at 0
-  ld   de,STARTSEC ; start at 0
+  ld   de,(STARTSEC) ; start at 0
   ld   b,200 ; = sector count, 512 bytes
   call cfSetBlock
   call cfIssueCommand
@@ -131,10 +145,10 @@ viewImage:
   push de
   ld   a,4
   sub  d
-  ld   c,a
-  ld   b,200
-  call multiply
-  ld   bc,STARTSEC
+  ld   e,a
+  ld   h,200
+  call multiply8
+  ld   bc,(STARTSEC)
   add  hl,bc
   ex   de,hl
   ld   hl,0 ; start at 0
@@ -155,23 +169,49 @@ viewImage:
   pop  hl
   ret
 
-
-multiply:
+; multiplies h by e and places the result in hl 
+multiply8:
   push de
   push bc
-  ld   hl,0
-  ld   a,b
-  or   a
-  jr   z,.end
-  ld   d,0
-  ld   e,c
-.mul_loop:
-  add  hl,de
-  djnz .mul_loop
-.end:
+  ld   d, 0	; Combining the overhead and
+  sla  h	; optimised first iteration
+  sbc  a, a
+  and  e
+  ld   l, a
+   
+  ld   b, 7
+.loop:
+  add  hl, hl          
+  jr   nc, $+3
+  add  hl, de
+  djnz .loop
   pop  bc
   pop  de
   ret
+
+; multiplies de by a and places the result in ahl
+multiply16:
+  ld   c, 0
+  ld   h, c
+  ld   l, h
+
+  add  a, a      ; optimised 1st iteration
+  jr   nc, $+4
+  ld   h,d
+  ld   l,e
+
+  ld   b, 7
+.loop:
+  add  hl, hl
+  rla
+  jr   nc, $+4
+  add  hl, de
+  adc  a, c            ; yes this is actually adc a, 0 but since c is free we set it to zero and so we can save 1 byte and up to 3 T-states per iteration
+   
+  djnz .loop
+   
+  ret
+
   
 printhex:
   push af
@@ -343,6 +383,12 @@ cfWaitDataReady:
   jr   nz,cfWaitDataReady
   ret
 
-welcome_msg:   db 13,"View image",CR,LF
+initTimer:
+  ld   a,0b101
+
+STARTSEC: dw   1
+
+welcome_msg:   db 12,"View image",CR,LF
+oneortwo_msg:  db 14,"Image number? "
 done_msg:      db 6,"Done",CR,LF
 hexconv_table: db "0123456789ABCDEF"

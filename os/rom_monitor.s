@@ -136,8 +136,8 @@ SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc
     v_cursor:     dw 0 ; from 0-TOTALCHARS
     vt_xstart:    dw 0
     vt_ystart:    dw 0
-    v_foreground: db 0
-    v_background: db 0
+    v_foreground: dw 0
+    v_background: dw 0
   
   org  0xff00
     ; keyboard
@@ -180,6 +180,7 @@ start:
 
   org 0x0038: ; RST 7 or  Mode 1 ISR
 INTISR:
+  di
   push af
   ; interrupts are already disabled
 
@@ -249,7 +250,7 @@ rom_entry:
   out  (PSG_DATA),a
 
 ; set leds to 1
-  ld   b,1*2
+  ld   b,1<<1
   call setLed
 
 ; init ctc timer
@@ -263,32 +264,32 @@ rom_entry:
   call initCtc
 
   ; set leds to 2
-  ld   b,2*2
+  ld   b,2<<1
   call setLed
 
 ; init serial
   call initSerialConsole
 
   ; set leds to 3
-  ld   b,3*2
+  ld   b,3<<1
   call setLed
 
   call initDisplay
 
 ; set leds to 4
-  ld   b,4*2
+  ld   b,4<<1
   call setLed
 
   call initSerialKeyboard
 
   ; set leds to 5
-  ld   b,5*2
+  ld   b,5<<1
   call setLed
 
   call RTCInit
 
 ; set leds to 6
-  ld   b,6*2
+  ld   b,6<<1
   call setLed
 
 ; setup interrupt
@@ -305,7 +306,7 @@ welcome:
   call displayClear
 
 ; set leds to 7
-  ld   b,7*2
+  ld   b,7<<1
   call setLed
 
   ld   hl,rom_msg
@@ -547,7 +548,7 @@ menu_dump:
 menu_run:
   call getAddress
   ret  z   ; result in hl, str in de
-  jp   (hl); jump to loaded code with will return
+  jp   (hl); jump to loaded code which will return
 
 menu_cls:
   call displayClearBuffer
@@ -1053,7 +1054,6 @@ putKey:
   push hl
   push de
   push bc
-  di
   ld   b,a
   ; begin
   ld   hl,(keyb_buf_wr)
@@ -1074,7 +1074,6 @@ putKey:
   ld   l,a
   ld   (keyb_buf_wr),hl
 .putKey_end:
-  ei
   pop  bc
   pop  de
   pop  hl
@@ -1148,11 +1147,11 @@ putDisplayChar:
   ld   (v_cursor),de
   pop  bc ; load original cursor back
 
-  or  a ; clear carry
-  ld  hl,(v_cursor)
-  sbc hl,bc
-  jr  z,.end_nodraw
-  jp  m,.end_nodraw ; TODO: why is start after the end?
+  or   a ; clear carry
+  ld   hl,(v_cursor)
+  sbc  hl,bc
+  jr   z,.end_nodraw
+  jp   m,.end_nodraw ; TODO: why is start after the end?
   
   ; update screen
   call displayRepaint ; bc start; de end
@@ -1835,9 +1834,9 @@ setLed:
   out  (PSG_DATA),a
   ret
 
-rom_msg:          db 22,"Z80 ROM Monitor v0.4",CR,LF
+rom_msg:          db 22,"Z80 ROM Monitor v0.5",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
-help_msg:         db 66,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>",CR,LF
+help_msg:         db 71,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>, cls",CR,LF
 halted_msg:       db 13,"System halted"
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF

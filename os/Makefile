@@ -31,6 +31,9 @@ testkbdread:
 testtft:
 	vasm -z80asm -Fbin -o testtft.bin testtft.s
 
+testtimer:
+	vasm -z80asm -Fbin -o test_timer.bin test_timer.s
+
 testgetarg:
 	vasm -z80asm -Fbin -o testgetarg.bin testgetarg.s
 
