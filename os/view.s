@@ -10,7 +10,12 @@ CF_LBA2    equ 0xC5
 CF_LBA3    equ 0xC6
 CF_STATCMD equ 0xC7
 
+SIO_BD equ 0x41
+SIO_BC equ 0x43
 
+CTC_A equ 0x00
+CTC_B equ 0x01
+CTC_C equ 0x02
 
 
 CR equ 0x0D
@@ -38,7 +43,7 @@ ILI_READ_ID4       equ 0xd3
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
-
+DELAY equ 10000 ; 10sec
 
   org 0x5000
 
@@ -46,48 +51,75 @@ DPYHEIGHT equ 320
   push bc
   push de
 
-  ld   hl,welcome_msg
-  rst  PRINTK
-
-  ld   hl,oneortwo_msg
-  rst  PRINTK
-  rst  READLINE
-
-  inc  hl
-  ld   a,(hl)
-  sub  '0'
-  
-  ld   de,600
-  call multiply16
-  ld   (STARTSEC),hl
-
-.skipsetsec:
-  
-;  call displayClear
-
-;   ld   a,0x0B  ; get display status
-;   out  (TFT_C),a
-
-;   in   a,(TFT_D); dummy data
-;   in   a,(TFT_D) ; [D7:0]
-;   call printhex
-
-;   ld   a,ILI_MEM_ACCESS_CTL     ; set address mode
-;   out  (TFT_C),a
-;   ld   a,0b00100000
-; ;  ld   a,0b00000000
-;   out   (TFT_D),a
-
   call initCompactFlash
 
   call viewImage
 
-  rst  READLINE ; read line to wait for key press
+  ld   a,0x53
+  ld   i,a
+
+  di
+
+  call initTimer
+
+  call initSerial
+
+  im   2; set interrupt mode 2
+
+  ei
+
+  ld   a,(imgindex)
+  ld   b,a
+.loop:
+  ld   a,(imgindex)
+  cp   b
+  jr   z,.loop
+  ld   b,a
+  ld   de,600
+  call multiply16
+  ld   (startsector),hl
+
+  call viewImage
+
+  jr   .loop
 
   pop  de
   pop  bc
   pop  hl
   ret
+
+
+
+nextimage:
+
+  di
+
+  push hl
+  push bc
+  push af
+
+  ld   hl,(counter)
+  dec  hl
+  ld   a,h
+  or   l
+  jr   nz,.endisr
+
+  ld   a,(imgindex);
+  inc  a
+  cp   3
+  jr   nz,.skipreset
+  ld   a,0
+.skipreset:
+  ld   (imgindex),a
+  ld   hl,DELAY
+.endisr
+  ld   (counter),hl
+  pop  af
+  pop  bc
+  pop  hl
+  ei  ; re-enable interrupts
+  reti
+
 
 
 ; bc: start, de: end
@@ -116,7 +148,7 @@ viewImage:
 ;   rst  PUTC
 
   ld   hl,0 ; start at 0
-  ld   de,(STARTSEC) ; start at 0
+  ld   de,(startsector) ; start at 0
   ld   b,200 ; = sector count, 512 bytes
   call cfSetBlock
   call cfIssueCommand
@@ -148,7 +180,7 @@ viewImage:
   ld   e,a
   ld   h,200
   call multiply8
-  ld   bc,(STARTSEC)
+  ld   bc,(startsector)
   add  hl,bc
   ex   de,hl
   ld   hl,0 ; start at 0
@@ -383,12 +415,42 @@ cfWaitDataReady:
   jr   nz,cfWaitDataReady
   ret
 
-initTimer:
-  ld   a,0b101
+initSerial:
+  ld   a,0b00000010 ; prepare WR2 (interrupt vector)
+  out  (SIO_BC),a
+  ld   a,0x10
+  out  (SIO_BC),a
+  ret
 
-STARTSEC: dw   1
+initTimer:
+  ld   a,0b10110101; int, timer, scale 256, rising, autostart,timeconst,cont,vector
+  out  (CTC_B),a
+  ld   a,29 ; 1ms (0.001006944..s)
+  out  (CTC_B),a
+
+  ld   a,0       ; set interrupt vector
+  out  (CTC_A),a
+  ld   a,0
+  out  (CTC_A),a
+
+  ret
+
+imgindex:      db 0
+startsector:   dw 0
+counter:       dw DELAY
 
 welcome_msg:   db 12,"View image",CR,LF
 oneortwo_msg:  db 14,"Image number? "
 done_msg:      db 6,"Done",CR,LF
 hexconv_table: db "0123456789ABCDEF"
+
+  org 0x5300
+MYISR_TABLE:
+  dw  0
+  dw  nextimage
+  dw  0
+  dw  0
+
+  org 0x5310
+SIOISR_TABLE:
+  dw 0x0038
