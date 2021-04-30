@@ -17,6 +17,12 @@ CTC_A equ 0x00
 CTC_B equ 0x01
 CTC_C equ 0x02
 
+PSG_REG equ 0x80
+PSG_DATA equ 0x81
+
+PSG_ENABLE  equ 7
+PSG_PORTA   equ 14
+PSG_PORTB   equ 15
 
 CR equ 0x0D
 LF equ 0x0A
@@ -43,13 +49,19 @@ ILI_READ_ID4       equ 0xd3
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
-DELAY equ 10000 ; 10sec
+DELAY equ 20000 ; 10sec
+MAX_IMAGES equ 7 ; current absolute max is 109 photos
 
   org 0x5000
 
   push hl
   push bc
   push de
+
+    ; set port to A to input and port B to output
+  ld   a,PSG_ENABLE
+  ld   b,0b10111111
+  call psgWrite
 
   call initCompactFlash
 
@@ -71,10 +83,19 @@ DELAY equ 10000 ; 10sec
   ld   a,(imgindex)
   ld   b,a
 .loop:
-  ld   a,(imgindex)
+
+  ; read button
+  ld   a,PSG_PORTA
+  call psgRead
+  bit  0,a
+  jr   z,.end ; if pushed 
+
+  ld   a,(imgindex) ; if there is a change
   cp   b
   jr   z,.loop
-  ld   b,a
+
+  ; yes, show next img
+  ld   b,a ; store current num in b
   ld   de,600
   call multiply16
   ld   (startsector),hl
@@ -83,12 +104,17 @@ DELAY equ 10000 ; 10sec
 
   jr   .loop
 
+.end:
+
+; stop the timer
+
+  ld   a,0b00110011; int, timer, scale 256, rising, autostart,timeconst,cont,vector
+  out  (CTC_B),a
+
   pop  de
   pop  bc
   pop  hl
   ret
-
-
 
 nextimage:
 
@@ -104,9 +130,9 @@ nextimage:
   or   l
   jr   nz,.endisr
 
-  ld   a,(imgindex);
+  ld   a,(imgindex)
   inc  a
-  cp   3
+  cp   MAX_IMAGES
   jr   nz,.skipreset
   ld   a,0
 .skipreset:
@@ -119,8 +145,6 @@ nextimage:
   pop  hl
   ei  ; re-enable interrupts
   reti
-
-
 
 ; bc: start, de: end
 viewImage:
@@ -173,6 +197,8 @@ viewImage:
   dec  c
   jr   nz,.viewloop
 
+
+  ; calculate the next block(200sectors) from startsector
   push bc
   push de
   ld   a,4
@@ -223,6 +249,7 @@ multiply8:
 
 ; multiplies de by a and places the result in ahl
 multiply16:
+  push bc
   ld   c, 0
   ld   h, c
   ld   l, h
@@ -241,7 +268,7 @@ multiply16:
   adc  a, c            ; yes this is actually adc a, 0 but since c is free we set it to zero and so we can save 1 byte and up to 3 T-states per iteration
    
   djnz .loop
-   
+  pop  bc
   ret
 
   
@@ -433,6 +460,17 @@ initTimer:
   ld   a,0
   out  (CTC_A),a
 
+  ret
+
+psgWrite:
+  out  (PSG_REG),a
+  ld   a,b
+  out  (PSG_DATA),a
+  ret
+
+psgRead:
+  out  (PSG_REG),a
+  in   a,(PSG_DATA)
   ret
 
 imgindex:      db 0
