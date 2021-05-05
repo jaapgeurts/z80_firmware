@@ -1,13 +1,11 @@
 
-; RTC ports
-RTC           equ 0x20
-RTC_CD        equ RTC+0x0d
-RTC_CE        equ RTC+0x0e
-RTC_CF        equ RTC+0x0f
-RTC_REG_COUNT equ 0x0d
 
-; 16 more registers up to 0x2F
 
+  include "consts.inc"
+
+  global RTCRead
+
+  section .text
 
 RTCRead:
 

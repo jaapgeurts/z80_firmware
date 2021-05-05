@@ -1,6 +1,13 @@
-; TFT display
-TFT_C equ 0xA0
-TFT_D equ 0xA1
+
+  include "consts.inc"
+
+  global initDisplay
+  global putDisplayChar
+  global printd
+  global displayClearBuffer
+  global displayClearScreen
+  global displayClear
+
 
 ; *********************
 ; *** DPY REGISTERS ***
@@ -19,20 +26,28 @@ ILI_SET_DPY_BRIGHT equ 0x51
 ILI_DPY_CTRL_VAL   equ 0x53
 ILI_READ_ID4       equ 0xd3
 
-; terminal size, total chars, font sizes
-; 40x20,  800, 12x16
-; 60x20, 1200,  8x16
-; 60x40, 2400,  8x8
-; 80x40, 3200,  6x8
-FONTW equ 8
-FONTH equ 16
-BYTESPERFONT equ (FONTW * FONTH) / 8
-COLS equ DPYWIDTH / FONTW
-ROWS equ DPYHEIGHT / FONTH
-TOTALCHARS equ COLS * ROWS
-DPYWIDTH equ 480
-DPYHEIGHT equ 320
+
 SCROLL_LINES equ COLS*4
+
+SCREEN_PTR_MASK_H  equ 0x07 ; high byte for anding: loc -> cursor
+SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc  
+
+
+  section .variables
+
+    ; display
+    v_screenbuf:  dc TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
+    v_cursor:     dw 0 ; from 0-TOTALCHARS
+    vt_xstart:    dw 0
+    vt_ystart:    dw 0
+    v_foreground: dw 0
+    v_background: dw 0
+
+    ; temporary vars
+    v_tmp:        dw 0
+    v_tmp2:       dw 0
+
+  section .text
 
 ; print char to lcd
 ; char in A
@@ -112,6 +127,10 @@ putDisplayChar:
 
 initDisplay:
   push bc
+
+  ld   bc,0
+  ld   (v_cursor),bc
+
 
   ld   a,0x01   ; reset TFT display
   out  (TFT_C),a
@@ -502,6 +521,16 @@ displaySetY1Y2:
   out  (TFT_D),a
   ret
 
+displayClear:
+  push bc
+  call displayClearBuffer
+  call displayClearScreen
+  ld   bc,0
+  ld   (v_cursor),bc
+  pop  bc
+  ret
+
+
 displayClearBuffer:
   push hl
   push bc
@@ -519,7 +548,7 @@ displayClearBuffer:
   pop  hl
   ret
 
-displayClear:
+displayClearScreen:
   push bc
   push de
   push hl
@@ -583,6 +612,7 @@ displayScrollBuffer:
   pop  hl
   ret
 
+  section glyphs
 allletters:
 allletters_08x16:
 letter0:    db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; '\x0'

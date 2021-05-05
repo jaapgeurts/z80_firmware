@@ -1,10 +1,18 @@
-SIO_BD equ 0x41
-SIO_BC equ 0x43
+   include "consts.inc"
 
+   global initSerialKeyboard
+   global handleKeyboard
 
 ; keyboard codes 
 L_SHIFT equ 0x12
 R_SHIFT equ 0x59
+
+  section .variables
+
+    v_shifted:    db 0 ; shift keystate
+
+
+  section .text
 
 getKeyboardChar:
 ; check if character available
@@ -19,6 +27,10 @@ getKeyboardChar:
 
   ; init the serial port
 initSerialKeyboard:
+
+  ld   a,0
+  ld   (v_shifted),a
+
 ; reset channel B
   ld   a, 0b00110000
   out  (SIO_BC), a
@@ -112,6 +124,7 @@ SQOT equ 0x27
 
 ;; PS2/ scancode set 2
 
+  section kbdscantable
 
 trans_table_normal:
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0  ; number at the start the array

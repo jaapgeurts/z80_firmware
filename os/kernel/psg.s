@@ -1,8 +1,4 @@
-
-
-; PSG ports
-PSG_REG equ 0x80
-PSG_DATA equ 0x81
+  include "consts.inc"
 
 PSG_FINEA   equ 0
 PSG_COARSEA equ 1
@@ -20,6 +16,10 @@ PSG_ENABLE  equ 7
 PSG_PORTA   equ 14
 PSG_PORTB   equ 15
 
+  global initPSG
+  global setLed
+
+  section .text
 
 ; b led value
 setLed:
@@ -30,3 +30,9 @@ setLed:
   ld   a,b
   out  (PSG_DATA),a
   ret
+
+initPSG:  ; set PSG ports to correct input and output
+  ld   a,PSG_ENABLE
+  out  (PSG_REG),a
+  ld   a,0b10111111
+  out  (PSG_DATA),a

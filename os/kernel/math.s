@@ -1,3 +1,8 @@
+  section .text
+
+  global multiply
+  global division
+
 ;   hl = b * c
 multiply:
   push de

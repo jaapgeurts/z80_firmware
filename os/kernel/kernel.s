@@ -3,10 +3,7 @@
 ; Date: 2021-02-01
 ;
 
-; ***********************
-; *** PORT IO MAPPING ***
-; ***********************
-
+  include "consts.inc"
 
 ; *****************
 ; *** CONSTANTS ***
@@ -15,17 +12,6 @@
 DUMP_ROWCOUNT    equ 0x10 ; 16 rows
 DUMP_BYTESPERROW equ 0x08 ; 8 bytes per row
 
-
-; char literals
-SOH equ 0x01
-EOT equ 0x04
-ACK equ 0x06
-BS  equ 0x08 ; backspace code
-LF  equ 0x0A
-CR  equ 0x0D
-NAK equ 0x15
-ETB equ 0x17
-CAN equ 0x18
 
 ; led masks
 LED1 equ 0x02
@@ -41,33 +27,21 @@ LED3 equ 0x08
 STACK_SIZE         equ 0x80 ; 128 bytes = 64 words
 SER_BUF_SIZE       equ 0x20
 READLINE_BUF_SIZE  equ 0x40 ; 64 chars
-SCREEN_PTR_MASK_H  equ 0x07 ; high byte for anding: loc -> cursor
-SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc  
 
 ; variables
+  section .variables
+
+  
   dsect
-  
-  org  0xF000
-    ; display
-    v_screenbuf:  dc TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
-    v_cursor:     dw 0 ; from 0-TOTALCHARS
-    vt_xstart:    dw 0
-    vt_ystart:    dw 0
-    v_foreground: dw 0
-    v_background: dw 0
-  
+
   org  0xff00
     ; keyboard
     keyb_buf:     dc SER_BUF_SIZE; // 32 bytes keyboard ring buffer ; must be aligned to 256 bit addres
     keyb_buf_wr:  dw 0  ; write index
     keyb_buf_rd:  dw 0  ; read index
-    v_shifted:    db 0 ; shift keystate
     readline_buf: dc READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
     ; real time clock
     v_timestruct: dc RTC_REG_COUNT ; time structure
-    ; temporary vars
-    v_tmp:        dw 0
-    v_tmp2:       dw 0
     STACK_BOTTOM: ; bottom of the stack
   org  0xFFFF
     STACK_TOP:
@@ -77,6 +51,8 @@ SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc
   assert STACK_BOTTOM + STACK_SIZE <= STACK_TOP
 
 ; rst jump table
+
+  section .text
 
   org 0x0000  ; RST 0
 
@@ -154,17 +130,10 @@ rom_entry:
   ld   hl,keyb_buf
   ld   (keyb_buf_wr),hl
   ld   (keyb_buf_rd),hl
-  ld   a,0
-  ld   (v_shifted),a
-  ld   bc,0
-  ld   (v_cursor),bc
 
 
   ; set all PSG ports to output
-  ld   a,PSG_ENABLE
-  out  (PSG_REG),a
-  ld   a,0b11111111
-  out  (PSG_DATA),a
+  call initPSG
 
 ; set leds to 1
   ld   b,1<<1
@@ -178,7 +147,7 @@ rom_entry:
   ; 115200    - 2
   ; baudrate in a
   ld a, 24
-  call initCtc
+  call initCTC
 
   ; set leds to 2
   ld   b,2<<1
@@ -466,10 +435,7 @@ menu_run:
   jp   (hl); jump to loaded code which will return
 
 menu_cls:
-  call displayClearBuffer
   call displayClear
-  ld   bc,0
-  ld   (v_cursor),bc
   ret
 
 
@@ -824,19 +790,6 @@ printk: ; print kernel message to serial (uses pascal strings)
   call printd; print to display
   ret
 
-prints:
-  push hl
-  push bc
-  ld   b,(hl)
-.printk_loop:
-  call waitSerialTX
-  inc  hl
-  ld   a, (hl)
-  out  (SIO_AD), a
-  djnz .printk_loop
-  pop  bc
-  pop  hl
-  ret
 
 getKeyWait:
   call getKey
@@ -905,21 +858,7 @@ putChar:
   call putDisplayChar
   ret
 
-
-  include "math.inc"
-
-  include "rtc.inc"
-
-  include "serial.inc"
-
-  include "ctc_timer.inc"
-
-  include "keyboard.inc"
-
-  include "display.inc"
-
-  include "psg.inc"
-
+  section .data
 
 rom_msg:          db 22,"Z80 ROM Monitor v0.5",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
@@ -953,9 +892,4 @@ cmd_run:     db 3,"run"
 cmd_cls:     db 3,"cls"
              dw menu_cls
 cmd_tab_end: db 0
-
-    
-
-; align code to 8192 bytes
-  org 0x2000
 

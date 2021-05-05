@@ -1,12 +1,10 @@
-; IO peripheral port definitions
-; CTC ports
-CTC_A equ 0x00
-CTC_B equ 0x01
-CTC_C equ 0x02
-CTC_D equ 0x03
+  include "consts.inc"
 
+  global initCTC
 
-initCtc:
+  section .text
+
+initCTC:
   push af ; store af. it contains the baud rate time constant
 ; clock is 3,686,400 Hz
 ; clock frequency of the CTC must be 2x trigger frequency in other words:

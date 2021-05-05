@@ -1,6 +1,25 @@
-; SIO ports 
-SIO_AD equ 0x40
-SIO_AC equ 0x42
+  include "consts.inc"
+
+  global initSerialConsole
+  global putSerialChar
+  global prints
+
+
+  section .text
+
+prints:
+  push hl
+  push bc
+  ld   b,(hl)
+.printk_loop:
+  call waitSerialTX
+  inc  hl
+  ld   a, (hl)
+  out  (SIO_AD), a
+  djnz .printk_loop
+  pop  bc
+  pop  hl
+  ret
 
   ; init the serial port
 initSerialConsole:
