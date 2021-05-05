@@ -5,21 +5,45 @@ MEMORY {
 }
 
 SECTIONS {
+
+  . = 0x0000;
+
+  .start : {
+      kernel.o(.start)
+  }
+
+  . = 0x0008;
+  .isr_table : {
+    kernel.o(.rst_table)
+  } 
+
+  . = 0x0038;
+  .isr_int : {
+     kernel.o(.isr_int)
+  }
+
+  . = 0x0066;
+  .isr_nmi : {
+     kernel.o(.isr_nmi)
+  }
+
   .text : {
       *(.text)
-  } >ROM1
+  }
 
-  .data : {
-      *(.data)
-  } >ROM1
+  .rodata1 : {
+      *(.rodata)
+  }
 
-  .tables : {
+  .rodata2 : {
     keyboard.o(kbdscantable)
     display.o(glyphs)
-  } >ROM1
+  }
 
-  .variables (NOLOAD) : {
-      *(.variables)
-  } >SYSRAM
+  . = 0xf000;
+
+  .bss (NOLOAD) : {
+      *(.bss)
+  }
 }
 

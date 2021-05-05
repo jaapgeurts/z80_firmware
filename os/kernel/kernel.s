@@ -28,8 +28,10 @@ STACK_SIZE         equ 0x80 ; 128 bytes = 64 words
 SER_BUF_SIZE       equ 0x20
 READLINE_BUF_SIZE  equ 0x40 ; 64 chars
 
+  global putKey
+
 ; variables
-  section .variables
+  section .bss
 
   
   dsect
@@ -52,26 +54,27 @@ READLINE_BUF_SIZE  equ 0x40 ; 64 chars
 
 ; rst jump table
 
-  section .text
-
-  org 0x0000  ; RST 0
-
+  section .start
 start:
   ld   sp, STACK_TOP    ; stack pointer at 40k (base = 32k + 8k -1)
   jp   rom_entry
 
-  org 0x0008 ; RST 1 getKey
+; RST points
+  section .rst_table
   jp   getKey
-  org 0x0010 ; RST 2 putChar
+  align 3
   jp   putChar
-  org 0x0018 ; RST 3 printk
+  align 3
   jp   printk
-  org 0x0020 ; RST 4 readline
+  align 3
   jp   readLine
-  org 0x0028 ; RST 5
-  org 0x0030 ; RST 6
+  align 3
+  ret
+  align 3
+  ret
 
-  org 0x0038: ; RST 7 or  Mode 1 ISR
+  ; RST 7 or  Mode 1 ISR
+  section .isr_int
 INTISR:
   di
   push af
@@ -114,15 +117,15 @@ INTISR:
 .intisr_end:
   pop  af
   ei
-  reti
+  retn
 
-  org 0x0066: ; NMI ISR
+  
+  ; NMI ISR
+  section .isr_nmi
   ei
   reti
   
-  ; reserve some bytes for the interrupt handler
-  ; put jump table here.
-  org 0x0100
+  section .text
 
 rom_entry:
 
@@ -858,7 +861,7 @@ putChar:
   call putDisplayChar
   ret
 
-  section .data
+  section .rodata
 
 rom_msg:          db 22,"Z80 ROM Monitor v0.5",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF

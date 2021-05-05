@@ -33,7 +33,7 @@ SCREEN_PTR_MASK_H  equ 0x07 ; high byte for anding: loc -> cursor
 SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc  
 
 
-  section .variables
+  section .bss
 
     ; display
     v_screenbuf:  dc TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
