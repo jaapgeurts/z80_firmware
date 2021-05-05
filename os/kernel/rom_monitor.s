@@ -286,6 +286,7 @@ rom_entry:
   ld   b,5<<1
   call setLed
 
+; TODO: probably unnecessary
   call RTCInit
 
 ; set leds to 6
@@ -301,6 +302,8 @@ welcome:
   call prints
   ld   hl,author_msg
   call prints
+  ld   hl,url_msg
+  call prints
 
   call displayClearBuffer
   call displayClear
@@ -312,6 +315,8 @@ welcome:
   ld   hl,rom_msg
   call printd
   ld   hl,author_msg
+  call printd
+  ld   hl,url_msg
   call printd
 
   ld   b,0
@@ -841,12 +846,15 @@ findSpace:
   
 RTCInit:
     ; start counting
-  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
-  out  (RTC_CD),a
-  ld   a,0b00000000 ; all clear
-  out  (RTC_CE),a
-  ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
-  out  (RTC_CF),a
+    ; TODO: is this even necessary
+;  ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
+;  out  (RTC_CD),a
+;  ld   a,0b00000000 ; all clear
+;  out  (RTC_CE),a
+  ; TODO: save H1 registers and up before overwriting the 24hr bit
+;  ld   a,0b00000100 ; test=0, 24hr, stop=0, reset=0
+;  out  (RTC_CF),a
+  ; TODO: restore H1 registers and up
   ret
 
 RTCRead:
@@ -859,12 +867,12 @@ RTCRead:
   call RTCCheckBusy
 
 .RTCRead_loop:
-  call RTCCheckBusy
   in   a,(c) ;
   and  0x0F ; chop off high nibble
   ld   (hl),a
   inc  c
   inc  hl
+
   djnz .RTCRead_loop
 
   ld   a,0b00000000 ; clear hold
@@ -1836,6 +1844,7 @@ setLed:
 
 rom_msg:          db 22,"Z80 ROM Monitor v0.5",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
+url_msg:          db 44,"https://github.com/jaapgeurts/z80_computer",CR,LF
 help_msg:         db 71,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>, cls",CR,LF
 halted_msg:       db 13,"System halted"
 prompt_msg:       db 2, "> "

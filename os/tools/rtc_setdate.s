@@ -28,6 +28,7 @@ READLINE equ 0x0020 ; RST 4 readline
   inc  ix ; skip first byte (length)
   ld   iy,v_timestruct
   ld   a,(ix+0)
+  ; sub  '0' unnecessary since only lower nibble is connected.
   ld   (iy+11),a  ; 10 year digit
   ld   a,(ix+1)
   ld   (iy+10),a  ; 1 year digit
@@ -40,27 +41,27 @@ READLINE equ 0x0020 ; RST 4 readline
   ld   a,(ix+5)
   ld   (iy+6),a   ; 1 day
   ld   a,(ix+7)
-  ld   (iy+5),a  ; 10 hour
+  ld   (iy+5),a   ; 10 hour
   ld   a,(ix+8)
-  ld   (iy+4),a  ; 1 hour
+  ld   (iy+4),a   ; 1 hour
   ld   a,(ix+9)
-  ld   (iy+3),a  ; 10 minute
+  ld   (iy+3),a   ; 10 minute
   ld   a,(ix+10)
-  ld   (iy+2),a  ; 1 minute
+  ld   (iy+2),a   ; 1 minute
   ld   a,(ix+11)
-  ld   (iy+1),a  ; 10 second
+  ld   (iy+1),a   ; 10 second
   ld   a,(ix+12)
-  ld   (iy+0),a  ; 1 second
+  ld   (iy+0),a   ; 1 second
 
 ; start counting
   ld   a,0b00000000 ; 30s-adj=0, irq=0, busy=0, hold=0
   out  (RTC_CD),a
   ld   a,0b00000000 ; all clear
   out  (RTC_CE),a
-  ld   a,0b00000000 ; test=0, 24hr, stop=0, reset=0
+  ld   a,0b00000100 ; test=0, 24hr, stop=0(=>start), reset=0
   out  (RTC_CF),a
 
-;  call RTCCheckBusy
+  call RTCCheckBusy
 
   call RTCStopReset
 
@@ -109,7 +110,7 @@ RTCStopReset:
   ld   b,153 ; delay 270us @ 7,372,800 MHz
 .RTCInit_delay:
   djnz .RTCInit_delay ; decrease 255 times. takes 13 T-states each loop
-  ld   a,0b00000111 ; stop + reset + 24h
+  ld   a,0b00000111 ; stop + reset  + 24h ; TODO: setting 24h makes the difference
   out  (RTC_CF),a
   pop  bc
   ret

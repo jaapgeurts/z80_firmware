@@ -37,6 +37,15 @@ PSG_PORTB   equ 15
   ld   hl, welcome_msg
   rst  PRINTK ; call printk
 
+  call music
+;  call flash
+
+  ; call start
+
+  pop  bc
+  pop  hl
+  ret
+
  start:
   ; set port to output
   ld   a,PSG_ENABLE
@@ -75,8 +84,6 @@ PSG_PORTB   equ 15
   ld   b,0
   call psgWrite
 
-  pop  bc
-  pop  hl
   ret
 
 psgWrite:
@@ -90,7 +97,7 @@ psgRead:
   in   a,(PSG_DATA)
   ret
 
-sound:
+music:
 
   ld   a,PSG_FINEA          ; fine tone = @ 1.8Mhz => 262 ~ 440hz
   out  (PSG_REG),a
@@ -112,7 +119,13 @@ sound:
   ld   a,0b00111110
   out  (PSG_DATA),a
 
-  ;jr   begin
+  call delay_long
+
+  ld   a,PSG_ENABLE
+  out  (PSG_REG),a
+  ld   a,0b10111111
+  out  (PSG_DATA),a
+
   ret
 
 flash:
