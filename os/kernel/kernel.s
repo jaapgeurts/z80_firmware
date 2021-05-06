@@ -24,32 +24,26 @@ LED3 equ 0x08
 ; *****************
 
 ; constants
-STACK_SIZE         equ 0x80 ; 128 bytes = 64 words
-SER_BUF_SIZE       equ 0x20
-READLINE_BUF_SIZE  equ 0x40 ; 64 chars
+STACK_SIZE        equ 0x40 ; 64 words
+STACK_TOP         equ 0x0000
+SER_BUF_SIZE      equ 0x20
+READLINE_BUF_SIZE equ 0x40 ; 64 chars
 
   global putKey
 
 ; variables
   section .bss
-
-  
-  dsect
-
-    keyb_buf:     dc SER_BUF_SIZE; // 32 bytes keyboard ring buffer ; must be aligned to 256 bit addres
-    keyb_buf_wr:  dw 0  ; write index
-    keyb_buf_rd:  dw 0  ; read index
+    ; must be at the top so it can be aligned correctly in the linker
+    keyb_buf:     dsb SER_BUF_SIZE;  32 bytes keyboard ring buffer ; must be aligned to 256 bit addres
+    keyb_buf_wr:  dsw 1  ; write index
+    keyb_buf_rd:  dsw 1  ; read index
     ; keyboard
-    readline_buf: dc READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
+    readline_buf: dsb READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
     ; real time clock
-    v_timestruct: dc RTC_REG_COUNT ; time structure
-    STACK_BOTTOM: ; bottom of the stack
-  org  0xFFFF
-    STACK_TOP:
-  dend
+    v_timestruct: dsb RTC_REG_COUNT ; time structure
 
-  assert STACK_TOP == 0xFFFF
-  assert STACK_BOTTOM + STACK_SIZE <= STACK_TOP
+  section .stack
+    dsw STACK_SIZE
 
 ; rst jump table
 

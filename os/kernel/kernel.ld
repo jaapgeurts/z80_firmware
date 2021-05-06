@@ -44,6 +44,7 @@ SECTIONS {
     FILL8(0x00);
     RESERVE(0x2000 - .);
   }
+
   . = 0xf000;
 
   .bss (NOLOAD) : {
@@ -52,6 +53,13 @@ SECTIONS {
       kernel.o(.bss)
       *(.bss)
   }
+
+  . = 0x10000 - SIZEOF(.stack);
+
+  .stack (NOLOAD) : {
+      kernel.o(.stack)
+  }
+
 
 }
 

@@ -34,18 +34,18 @@ SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc
 
 
   section .bss
-
     ; display
-    v_screenbuf:  dc TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
-    v_cursor:     dw 0 ; from 0-TOTALCHARS
-    vt_xstart:    dw 0
-    vt_ystart:    dw 0
-    v_foreground: dw 0
-    v_background: dw 0
+    ; must be at the top so it can be aligned correctly by the linker
+    v_screenbuf:  dsb TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
+    v_cursor:     dsw 1 ; from 0-TOTALCHARS
+    vt_xstart:    dsw 1
+    vt_ystart:    dsw 1
+    v_foreground: dsw 1
+    v_background: dsw 1
 
     ; temporary vars
-    v_tmp:        dw 0
-    v_tmp2:       dw 0
+    v_tmp:        dsw 1
+    v_tmp2:       dsw 1
 
   section .text
 
