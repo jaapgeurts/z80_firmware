@@ -40,10 +40,18 @@ SECTIONS {
     display.o(glyphs)
   }
 
+  .fill : {
+    FILL8(0x00);
+    RESERVE(0x2000 - .);
+  }
   . = 0xf000;
 
   .bss (NOLOAD) : {
+      display.o(.bss)
+      . = ALIGN(60);
+      kernel.o(.bss)
       *(.bss)
   }
+
 }
 

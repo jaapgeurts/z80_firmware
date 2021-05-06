@@ -7,9 +7,12 @@
 L_SHIFT equ 0x12
 R_SHIFT equ 0x59
 
+
   section .bss
 
-    v_shifted:    db 0 ; shift keystate
+    dsect
+      v_shifted:    db 0 ; shift keystate
+    dend
 
 
   section .text

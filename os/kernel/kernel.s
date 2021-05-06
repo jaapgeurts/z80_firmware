@@ -36,11 +36,10 @@ READLINE_BUF_SIZE  equ 0x40 ; 64 chars
   
   dsect
 
-  org  0xff00
-    ; keyboard
     keyb_buf:     dc SER_BUF_SIZE; // 32 bytes keyboard ring buffer ; must be aligned to 256 bit addres
     keyb_buf_wr:  dw 0  ; write index
     keyb_buf_rd:  dw 0  ; read index
+    ; keyboard
     readline_buf: dc READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
     ; real time clock
     v_timestruct: dc RTC_REG_COUNT ; time structure
@@ -75,7 +74,6 @@ start:
 
   ; RST 7 or  Mode 1 ISR
   section .isr_int
-INTISR:
   di
   push af
   ; interrupts are already disabled

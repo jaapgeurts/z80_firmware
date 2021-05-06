@@ -22,7 +22,7 @@ kernel: $(OBJS)
 %.o: %.s
 	$(ASM) $(AFLAGS) -o $@ $<
 
-upload: monitor
+upload: kernel
 	minipro -p at28c64b -P -w kernel.bin
 
 .PHONY: clean
