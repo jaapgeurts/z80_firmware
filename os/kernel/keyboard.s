@@ -127,7 +127,7 @@ SQOT equ 0x27
 
 ;; PS2/ scancode set 2
 
-  section kbdscantable
+  section .rodata
 
 trans_table_normal:
   db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 ; 0  ; number at the start the array

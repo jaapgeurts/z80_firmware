@@ -6,7 +6,7 @@ CC=vbcc
 
 AFLAGS=-z80asm -Fvobj
 # output rawbinary
-LFLAGS=-b rawbin1 -T kernel.ld
+LFLAGS=-b rawbin1 -T kernel.ld -M
 
 # define the C source files
 SRCS := $(wildcard *.s)
@@ -18,12 +18,19 @@ all: kernel
 
 kernel: $(OBJS)
 	$(LINK) $(LFLAGS) -o $@.bin $^
+	split -b 8192 $@.bin $@\-
 
 %.o: %.s
 	$(ASM) $(AFLAGS) -o $@ $<
 
 upload: kernel
 	minipro -p at28c64b -P -w kernel.bin
+
+upload1: kernel
+	minipro -p at28c64b -P -w kernel-aa
+
+upload2: kernel
+	minipro -p at28c64b -P -w kernel-ab
 
 .PHONY: clean
 

@@ -30,6 +30,8 @@ SER_BUF_SIZE      equ 0x20
 READLINE_BUF_SIZE equ 0x40 ; 64 chars
 
   global putKey
+  global getKey
+  global putChar
 
 ; variables
   section .bss
@@ -432,6 +434,9 @@ menu_run:
 menu_cls:
   call displayClear
   ret
+
+menu_basic:
+  jp   BASIC_START
 
 
 ; parses an address string into hl
@@ -886,5 +891,7 @@ cmd_run:     db 3,"run"
              dw menu_run
 cmd_cls:     db 3,"cls"
              dw menu_cls
+cmd_basic:   db 5,"basic"
+             dw menu_basic
 cmd_tab_end: db 0
 

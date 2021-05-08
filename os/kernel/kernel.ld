@@ -13,9 +13,9 @@ SECTIONS {
   }
 
   . = 0x0008;
-  .isr_table : {
+  .rst_table : {
     kernel.o(.rst_table)
-  } 
+  }
 
   . = 0x0038;
   .isr_int : {
@@ -35,14 +35,22 @@ SECTIONS {
       *(.rodata)
   }
 
+/*
+  move to second rom later to create space
   .rodata2 : {
     keyboard.o(kbdscantable)
     display.o(glyphs)
   }
+*/
+  . = 0x2000;
+
+  .basic_text : {
+    tinybasic.o(.basic_text)
+  }
 
   .fill : {
     FILL8(0x00);
-    RESERVE(0x2000 - .);
+    RESERVE(0x4000 - .);
   }
 
   . = 0xf000;
