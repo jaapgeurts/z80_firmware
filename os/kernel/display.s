@@ -13,6 +13,8 @@
 ; *** DPY REGISTERS ***
 ; *********************
 
+  section .consts
+
 ILI_WAKEUP         equ 0x11
 ILI_DPY_NORMAL     equ 0x13
 ILI_DPY_OFF        equ 0x28 

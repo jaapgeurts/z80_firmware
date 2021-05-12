@@ -53,6 +53,11 @@ SECTIONS {
     RESERVE(0x4000 - .);
   }
 
+
+  .basic_bss : {
+      tinybasic.o(.basic_bss)
+  }
+
   . = 0xf000;
 
   .bss (NOLOAD) : {

@@ -9,6 +9,8 @@
 ; *** CONSTANTS ***
 ; *****************
 
+  section .consts
+
 DUMP_ROWCOUNT    equ 0x10 ; 16 rows
 DUMP_BYTESPERROW equ 0x08 ; 8 bytes per row
 

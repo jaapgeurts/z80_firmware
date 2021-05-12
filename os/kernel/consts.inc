@@ -1,6 +1,9 @@
 ; ***********************
 ; *** PORT IO MAPPING ***
 ; ***********************
+
+  section .consts
+
 ; IO peripheral port definitions
 ; CTC ports
 CTC_A equ 0x00

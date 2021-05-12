@@ -1,5 +1,7 @@
   include "consts.inc"
 
+  section .consts
+
 PSG_FINEA   equ 0
 PSG_COARSEA equ 1
 PSG_AMPLA   equ 8

@@ -4,7 +4,7 @@ ASM=vasmz80_oldstyle
 LINK=vlink
 CC=vbcc
 
-AFLAGS=-z80asm -Fvobj
+AFLAGS=-z80asm -Fvobj -unsshift
 # output rawbinary
 LFLAGS=-b rawbin1 -T kernel.ld -M
 

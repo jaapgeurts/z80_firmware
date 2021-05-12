@@ -1,4 +1,6 @@
 
+  section .consts
+
 ; PIO ports
 PIO_AC equ 0x60
 

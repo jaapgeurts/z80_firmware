@@ -39,7 +39,7 @@
 ; to me in your work. And please, distribute freely.
 ;*************************************************************
 
-
+  section .consts
 
 SPACE           EQU     020H            ; Space
 TAB             EQU     09H             ; HORIZONTAL TAB
@@ -57,22 +57,6 @@ CTRLU           EQU     015H            ; Control "U"
 ESC             EQU     01BH            ; Escape
 DEL             EQU     07FH            ; Delete
 
-STACK           EQU     0E000H          ; STACK
-OCSW            EQU     0C000H          ;SWITCH FOR OUTPUT
-CURRNT          EQU     OCSW+1          ;POINTS FOR OUTPUT
-STKGOS          EQU     OCSW+3          ;SAVES SP IN 'GOSUB'
-VARNXT          EQU     OCSW+5          ;TEMP STORAGE
-STKINP          EQU     OCSW+7          ;SAVES SP IN 'INPUT'
-LOPVAR          EQU     OCSW+9          ;'FOR' LOOP SAVE AREA
-LOPINC          EQU     OCSW+11         ;INCREMENT
-LOPLMT          EQU     OCSW+13         ;LIMIT
-LOPLN           EQU     OCSW+15         ;LINE NUMBER
-LOPPT           EQU     OCSW+17         ;TEXT POINTER
-RANPNT          EQU     OCSW+19         ;RANDOM NUMBER POINTER
-TXTUNF          EQU     OCSW+21         ;->UNFILLED TEXT AREA
-TXTBGN          EQU     OCSW+23         ;TEXT SAVE AREA BEGINS
-
-TXTEND          EQU     0EF00H          ;TEXT SAVE AREA ENDS
 
 
 ;*************************************************************
@@ -87,14 +71,17 @@ TXTEND          EQU     0EF00H          ;TEXT SAVE AREA ENDS
 ; IN THIS SECTION. THEY CAN BE REACHED WITH 'CALL'.
 ;*************************************************************
   MACRO DWA
-;    DW   \1 | 0x8000
-    DB   (\1 / 256 ) + 128
+;    DW   \1 + 32768
+    DB   (\1 >> 8 ) + 128
     DB   \1 & 0FFH
+    
   ENDM
 
   global BASIC_START
 
   section .basic_text
+  
+  rorg 02000h
 
 BASIC_START:
 START:
@@ -227,11 +214,11 @@ AHOW:
         LD DE,HOW
         JP ERROR_ROUTINE
 
-
 HOW:    DB "HOW?",CR
 OK:     DB "OK",CR
 WHAT:   DB "WHAT?",CR
 SORRY:  DB "SORRY",CR
+
 
 ;*************************************************************
 ;
@@ -1613,7 +1600,6 @@ CI1:
         RET NZ                          ;NO, RETURN "NZ"
         JP RSTART                       ;YES, RESTART TBI
 
-
 MSG1:   ;DB   ESC,"[2J",ESC,"[H"			;SCREEN CLEAR
         DB   "Z80 TINY BASIC 2.0g",CR		;BOOT MESSAGE
 MSG2:   DB   "PORTED BY DOUG GABBARD, 2017",CR
@@ -1753,7 +1739,7 @@ SERIAL_INIT:
     ret
 ;-------------------------------------------------------------------------------
 TX_RDY:
-	call putChar
+;	call putSerialChar
     ret
 
 ;-------------------------------------------------------------------------------
@@ -1765,18 +1751,37 @@ RX_RDY:
 ;///////////////////////////////////////////////////////////////////////////////
 ;-------------------------------------------------------------------------------
 
-LSTROM EQU 4000h:                                 ;ALL ABOVE CAN BE ROM
+;LSTROM EQU 04000h:                                 ;ALL ABOVE CAN BE ROM
+
+
 					;HERE DOWN MUST BE RAM
 ;        ORG  00800H
 ;        ORG  09F00H
-  section .bss
-VARBGN: DS   55                         ;VARIABLE @(0)
-;VARBGN EQU 09F00H
-BUFFER: DS   64                         ;INPUT BUFFER
-;BUFFER EQU 09f37h
-BUFEND: DS   1                          ;BUFFER ENDS
-;BUFEND EQU 09f77h
-STKLMT: DS   1                          ;TOP LIMIT FOR STACK
-;STKLMT EQU 09f78h
+
+  section .basic_bss
+
+LSTROM          ds 0
+OCSW            ds 1          ;SWITCH FOR OUTPUT
+CURRNT          ds 2          ;POINTS FOR OUTPUT
+STKGOS          ds 2         ;SAVES SP IN 'GOSUB'
+VARNXT          ds 2         ;TEMP STORAGE
+STKINP          ds 2          ;SAVES SP IN 'INPUT'
+LOPVAR          ds 2          ;'FOR' LOOP SAVE AREA
+LOPINC          ds 2         ;INCREMENT
+LOPLMT          ds 2         ;LIMIT
+LOPLN           ds 2         ;LINE NUMBER
+LOPPT           ds 2         ;TEXT POINTER
+RANPNT          ds 2         ;RANDOM NUMBER POINTER
+TXTUNF          ds 2         ;->UNFILLED TEXT AREA
+TXTBGN          ds 32768     ;TEXT SAVE AREA BEGINS
+TXTEND          ds 0          ;TEXT SAVE AREA ENDS
+
+VARBGN: DS   55                         ;VARIABLE @(0) ;VARBGN EQU 09F00H
+BUFFER: DS   64                         ;INPUT BUFFER ;BUFFER EQU 09f37h
+BUFEND: DS   1                          ;BUFFER ENDS ;BUFEND EQU 09f77h
+STKLMT: DS   512                          ;TOP LIMIT FOR STACK ;STKLMT EQU 09f78h
+
+STACK:           ds 0         ; STACK
+
 
   END
