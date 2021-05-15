@@ -105,8 +105,8 @@ putDisplayChar:
 
 .placeChar
   push de  ; store start location
-  push de
-  pop  hl ; ld   hl,de
+  ld   h,d ; ld   hl,de
+  ld   l,e
   ; add cursor index to screenbuf start
   ld   c,a ; store char
   ld   a,h
@@ -227,8 +227,8 @@ printd:
   ; get remainder
   push hl ; store the str pointer
   push bc ; store the str index counter
-  push de ; ld hl,de
-  pop  hl ; hl contains the v_cursor
+  ld   h,d ; ld hl,de
+  ld   l,e ; hl contains the v_cursor
   
   ld   a,h ; convert screen_buf ptr into cursor
   and  SCREEN_PTR_MASK_H
@@ -252,18 +252,22 @@ printd:
   ; process linefeed
   push hl ; store the str pointer
 
-  push de ; ld hl,de
-  pop  hl ; hl contains the v_cursor
+  ld   h,d; ld hl,de
+  ld   l,e ; hl contains the v_cursor
   ld   a,h ; convert screen_buf ptr into cursor
   and  SCREEN_PTR_MASK_H
   ld   h,a
 
-  push bc
+  ; push bc
   ; add cols to cursor (= LF)
-  ld   bc,COLS
-  add  hl,bc
+  ld   de,COLS
+  add  hl,de
   ex   de,hl  ;push result back into de (screen_buf ptr)
-  pop  bc
+
+  ; restore screenprt
+  ld   a,d
+  or   SCREEN_BASE_MASK_H
+  ld   d,a
 
   call checkScrollBuffer
 
@@ -396,8 +400,8 @@ displayRepaint:
   ; calculate startx = (start%COLS ) * fontw
   ; calculate starty = (start/COLS) * fonth
   push bc
-  push bc
-  pop  hl ; ld hl,bc
+  ld   h,b ; ld hl,bc
+  ld   l,c
   ld   c,COLS
   call division ; hl / c = hl rem a
   push hl ; push quotient (y)
@@ -418,8 +422,8 @@ displayRepaint:
   pop  bc
   ld   hl,v_screenbuf
   add  hl,bc
-  push hl
-  pop  bc ; ld bc,hl: bc contains start location in screenbuf
+  ld   b,h
+  ld   c,l; ld bc,hl: bc contains start location in screenbuf
 
 .nextGlyph:
 
