@@ -54,15 +54,16 @@ SECTIONS {
   }
 
 
-  .basic_bss : {
+  .basic_bss (NOLOAD) : {
       tinybasic.o(.basic_bss)
   }
 
   . = 0xf000;
 
   .bss (NOLOAD) : {
+      . = ALIGN(40);  /* alignment for text buffer equal to amount # of COLS */
       display.o(.bss)
-      . = ALIGN(60);
+      . = ALIGN(0x100); /* alignment for keyb buffer */
       kernel.o(.bss)
       *(.bss)
   }

@@ -15,25 +15,33 @@
 
   section .consts
 
-ILI_WAKEUP         equ 0x11
-ILI_DPY_NORMAL     equ 0x13
-ILI_DPY_OFF        equ 0x28 
-ILI_DPY_ON         equ 0x29
-ILI_SET_COLADR     equ 0x2a
-ILI_SET_ROWADR     equ 0x2b
-ILI_MEM_WRITE      equ 0x2c
-ILI_MEM_ACCESS_CTL equ 0x36
-ILI_PXL_FMT        equ 0x3a
-ILI_SET_DPY_BRIGHT equ 0x51
-ILI_DPY_CTRL_VAL   equ 0x53
-ILI_READ_ID4       equ 0xd3
+ILI_REG_SLPOUT   equ 0x11
+ILI_REG_NORON    equ 0x13
+ILI_REG_DISOFF   equ 0x28 
+ILI_REG_DISON    equ 0x29
+ILI_REG_CASET    equ 0x2a
+ILI_REG_PASET    equ 0x2b
+ILI_REG_RAMWR    equ 0x2c
+ILI_REG_VSCRDEF  equ 0x33
+ILI_REG_MADCTL   equ 0x36
+ILI_REG_VSCRSADD equ 0x37
+ILI_REG_COLMOD   equ 0x3a
+ILI_REG_WRDISBV  equ 0x51
+ILI_REG_WRCTRLD  equ 0x53
+ILI_REG_RDID4    equ 0xd3
 
-
-SCROLL_LINES equ COLS*4
+SCROLL_NUM_LINES equ 1 ; scroll one line at a time
+SCROLL_NUM_CHARS equ COLS * SCROLL_NUM_LINES
 
 SCREEN_PTR_MASK_H  equ 0x07 ; high byte for anding: loc -> cursor
 SCREEN_BASE_MASK_H equ 0xf0 ; high byte for cursor -> loc  
 
+ILI_MASK_MADCTL_MY  equ 0x80
+ILI_MASK_MADCTL_MX  equ 0x40
+ILI_MASK_MADCTL_MV  equ 0x20
+ILI_MASK_MADCTL_ML  equ 0x10
+ILI_MASK_MADCTL_BGR equ 0x08
+ILI_MASK_MADCTL_MH  equ 0x04
 
   section .bss
     ; display
@@ -142,7 +150,7 @@ delay1:
   djnz  delay1
 
  ; TODO: print what has been detected
-;  ld   a,ILI_READ_ID4  ; read id
+;  ld   a,ILI_REG_RDID4  ; read id
 ;  out  (TFT_C),a
 ;  in   a,(TFT_D); dummy data
 ;  in   a,(TFT_D) ; not relevant
@@ -152,41 +160,41 @@ delay1:
 ;  call printhex
 
 ; TODO: reduce by writing a loop and sending data from an array
-  ld   a,ILI_DPY_OFF  ; dpy off
+  ld   a,ILI_REG_DISOFF  ; dpy off
   out  (TFT_C),a
 
-  ld   a,ILI_WAKEUP   ; wake up
+  ld   a,ILI_REG_SLPOUT   ; wake up
   out  (TFT_C),a
 
-  ld   a,ILI_DPY_CTRL_VAL   ; CTRL display
+  ld   a,ILI_REG_WRCTRLD   ; CTRL display
   out  (TFT_C),a ; 
   ld   a,0b00100100
   out  (TFT_D),a
 
-  ld   a,ILI_SET_DPY_BRIGHT   ; write brightness
+  ld   a,ILI_REG_WRDISBV   ; write brightness
   out  (TFT_C),a ; 
   ld   a,0xff
   out  (TFT_D),a
    
-  ld   a,ILI_MEM_ACCESS_CTL     ; set address mode
+  ld   a,ILI_REG_MADCTL     ; set address mode
   out  (TFT_C),a
-  ld   a,0b00100000
-;  ld   a,0b00000000
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_MY | ILI_MASK_MADCTL_ML
   out   (TFT_D),a
 
-  ld   a,ILI_PXL_FMT
+  ld   a,ILI_REG_COLMOD
   out  (TFT_C),a ; set pixel format
   ld   a,0b00000101
   out  (TFT_D),a
 
-  ld   a,ILI_DPY_NORMAL
+  ld   a,ILI_REG_NORON
   out  (TFT_D),a
 
   ld   b,0xff
 delay2:
   djnz  delay2
 
-  ld   a,ILI_DPY_ON  ; dpy on
+  ld   a,ILI_REG_DISON  ; dpy on
   out  (TFT_C),a
 
   pop  bc
@@ -215,7 +223,7 @@ printd:
   ; check for CR and LF
   cp   CR
   jr   nz, .checkLF
-  ; move cursor to home
+  ; process CR => move cursor to home
   ; get remainder
   push hl ; store the str pointer
   push bc ; store the str index counter
@@ -241,14 +249,21 @@ printd:
 .checkLF:
   cp   LF
   jr   nz,.storeChar
-
+  ; process linefeed
   push hl ; store the str pointer
 
-  ; add cols to cursor (= LF)
-  ld   hl,COLS
-  add  hl,de 
-  ex   de,hl  ;push result back into de (screen_buf ptr)
+  push de ; ld hl,de
+  pop  hl ; hl contains the v_cursor
+  ld   a,h ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   h,a
 
+  push bc
+  ; add cols to cursor (= LF)
+  ld   bc,COLS
+  add  hl,bc
+  ex   de,hl  ;push result back into de (screen_buf ptr)
+  pop  bc
 
   call checkScrollBuffer
 
@@ -294,20 +309,7 @@ checkScrollCursor:
   ; hl contains result
   jp   p,.noscroll 
 
-  call displayScrollBuffer
-
-  push de
-  ld   bc,0
-  ld   de,TOTALCHARS
-  call displayRepaint
-  pop  de
-
-  ; subtract COLS from de
-  or   a ; clear carry
-  ld   hl,SCROLL_LINES
-  ex   de,hl
-  sbc  hl,de
-  ex   de,hl
+  call displayDoScroll
 
 .noscroll:
   pop  bc
@@ -326,17 +328,12 @@ checkScrollBuffer:
   ; hl contains result
   jp   p,.noscroll 
 
-  call displayScrollBuffer
+  call displayDoScroll
 
-  push de
-  ld   bc,0
-  ld   de,TOTALCHARS
-  call displayRepaint
-  pop  de
-
-  ; subtract COLS from de
+  ; reset de
+  ; sub TOTALCHARS from de
   or   a ; clear carry
-  ld   hl,SCROLL_LINES
+  ld   hl,TOTALCHARS
   ex   de,hl
   sbc  hl,de
   ex   de,hl
@@ -344,7 +341,46 @@ checkScrollBuffer:
 .noscroll:
   pop  bc
   pop  hl
-  ret 
+  ret
+
+displayDoScroll:
+   call displayScrollBuffer
+
+; *** SOFTWARE SCROLLING
+; When software scrolling is in use we have to repaint all
+;  push de
+;  ld   bc,0
+;  ld   de,TOTALCHARS
+;  call displayRepaint
+;  pop  de
+;**** END SOFTWARE SCROLLING
+
+;*** HARDWARE SCOLLING
+
+  ; set direction reverse
+;   ld   a,ILI_REG_MADCTL
+;   out  (TFT_C),a
+;   ld   a, ILI_MASK_MADCTL_ML  | ILI_MASK_MADCTL_MY
+;   out  (TFT_D),a
+
+  ld   a,ILI_REG_VSCRSADD
+  out  (TFT_C),a
+  ld   a, (FONTH * SCROLL_NUM_LINES) >> 8
+  out  (TFT_D),a
+  ld   a, (FONTH * SCROLL_NUM_LINES) & 0xFF
+  out  (TFT_D),a
+
+;   ld   a,ILI_REG_MADCTL
+;   out  (TFT_C),a
+;   ld   a, ILI_MASK_MADCTL_MY
+;   out  (TFT_D),a
+
+
+;*** END HARDWARE SCOLLING
+
+
+
+  ret
 
 ; bc: start, de: end
 displayRepaint:
@@ -357,12 +393,12 @@ displayRepaint:
   add  hl,de ; save end location
   ld   (v_tmp2),hl
 
-  ; calculate startx = (start%60 ) * fontw
-  ; calculate starty = (start/60) * fonth
+  ; calculate startx = (start%COLS ) * fontw
+  ; calculate starty = (start/COLS) * fonth
   push bc
   push bc
   pop  hl ; ld hl,bc
-  ld   c,60
+  ld   c,COLS
   call division ; hl / c = hl rem a
   push hl ; push quotient (y)
   ; calc x
@@ -403,14 +439,14 @@ displayRepaint:
   ex   de,hl ; end in de
   pop  hl
   call displaySetY1Y2
-  ld   a,ILI_MEM_WRITE    ; do write
+  ld   a,ILI_REG_RAMWR    ; do write
   out  (TFT_C),a
   pop  bc
 
   ld   a,(bc) ; load letter
   
   ; get the glyph
-  ld   de,BYTESPERFONT  ; font small
+  ld   de,BYTESPERGLYPH  ; font small
   ld   hl,allletters
 .findGlyph
   cp   0
@@ -425,7 +461,7 @@ displayRepaint:
   push bc ; contains the index into the screenbuf
 
   ; pixels to set
-  ld   b,BYTESPERFONT ; font small
+  ld   b,BYTESPERGLYPH ; font small
 .next_byte:
   ld   a,(hl)
   ld   c, 8
@@ -472,10 +508,10 @@ displayRepaint:
   ld  de,FONTW
   add hl,de
   ld  a,h
-  cp  1
+  cp  DPYWIDTH >> 8
   jr  nz, .next1
   ld  a,l
-  cp  0xe0  ; one beyond the last column
+  cp  DPYWIDTH & 0xff  ; one beyond the last column
   jr  nz, .next1
   ; over edge; increase y and set x to zero
   ; increase y
@@ -496,7 +532,7 @@ displayRepaint:
 
 ; hl = x1,de = x2
 displaySetX1X2:
-  ld   a,ILI_SET_COLADR   ; set x1,x2
+  ld   a,ILI_REG_CASET   ; set x1,x2
   out  (TFT_C),a
   ld   a,h
   out  (TFT_D),a
@@ -511,7 +547,7 @@ displaySetX1X2:
 ; set start y1,y2
 ; hl = y1,de = y2
 displaySetY1Y2:
-  ld   a,ILI_SET_ROWADR   ; set y1,y2
+  ld   a,ILI_REG_PASET   ; set y1,y2
   out  (TFT_C),a
   ld   a,h
   out  (TFT_D),a
@@ -556,12 +592,12 @@ displayClearScreen:
   push hl
 
   ld   hl,0
-  ld   de,0x01e0
+  ld   de,DPYWIDTH
   call displaySetX1X2
   ld   hl,0
-  ld   de,0x0140
+  ld   de,DPYHEIGHT
   call displaySetY1Y2
-  ld   a,ILI_MEM_WRITE    ; do write
+  ld   a,ILI_REG_RAMWR    ; do write
   out  (TFT_C),a
 ; loop 480x320 times = 3 * 200 * 256
   ld   d,3
@@ -583,14 +619,15 @@ displayClearScreen:
   pop  bc
   ret
 
+; scroll text buffer
 displayScrollBuffer:
   push hl
   push bc
   push de
 
-  ld   bc,TOTALCHARS - SCROLL_LINES ; scroll quarter of the screen
+  ld   bc,TOTALCHARS - SCROLL_NUM_CHARS ; scroll quarter of the screen
   ld   de,v_screenbuf
-  ld   hl,v_screenbuf+SCROLL_LINES
+  ld   hl,v_screenbuf + SCROLL_NUM_CHARS
 .dpyLoopScroll:
   ld   a,(hl)
   ld   (de),a
@@ -602,8 +639,8 @@ displayScrollBuffer:
   jr   nz,.dpyLoopScroll
 
 ; clear last line
-  ld   b,SCROLL_LINES
-  ld   hl,v_screenbuf+TOTALCHARS-SCROLL_LINES
+  ld   b,SCROLL_NUM_CHARS
+  ld   hl,v_screenbuf + TOTALCHARS-SCROLL_NUM_CHARS
 .dpyLoopEmpty
   ld   (hl),0
   inc  hl

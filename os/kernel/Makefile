@@ -20,7 +20,7 @@ kernel: $(OBJS)
 	$(LINK) $(LFLAGS) -o $@.bin $^
 	split -b 8192 $@.bin $@\-
 
-%.o: %.s
+%.o: %.s consts.inc
 	$(ASM) $(AFLAGS) -o $@ $<
 
 upload: kernel
