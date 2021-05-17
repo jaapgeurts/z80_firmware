@@ -7,18 +7,30 @@ PUTC     equ 0x0010 ; RST 2 putChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
+TOTALCHARS equ 1200
 
-org 0x5000
+  dsect
+    org 0x9000
+    v_charstart: dsw 1
+    v_cursor:  dsw 1
+  dend
+
+  org 0x5000
 
   push hl
   push bc
   push de
 
+  ld   bc,0
+  ld   (v_charstart),bc
+  
+
   ld   hl,welcome_msg
   rst  PRINTK
 
-  ld   bc,0
-  ld   de,1
+  ld   bc,1199
+  ld   (v_cursor),bc
+  ld   de,1200
 
   call checkScrollCursor
 
@@ -52,8 +64,8 @@ checkScrollCursor:
   ld   hl, (v_charstart)
   sbc  hl,de
   ; hl contains result
-  jp   m,.checkscroll1 ; de is before the linestart so no scroll
-  jr  .noscroll
+  jr   z,.checkscroll1
+  jp   p,.noscroll ; de is before the linestart so no scroll
 .checkscroll1:
   ld   a,'1'
   rst PUTC

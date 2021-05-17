@@ -267,8 +267,8 @@ checkScrollCursor:
   ld   hl, (v_charstart)
   sbc  hl,de
   ; hl contains result
-  jp   m,.checkscroll1 ; de is before the linestart so no scroll
-  jr  .noscroll
+  jr   z,.checkscroll1
+  jp   p,.noscroll ; de is before the linestart so no scroll
 .checkscroll1:
   ; cursor is after linestart
   or   a ; clear carry
@@ -286,6 +286,28 @@ checkScrollCursor:
   jp   p,.noscroll
 
 .doscroll:
+
+  ; clear last line
+  ld   b,COLS
+  ld   hl,(v_charstart)
+  ; restore screenptr
+  ld   a,h
+  or   SCREEN_BASE_MASK_H
+  ld   h,a  
+.clearline:
+  ld   (hl),0
+  inc  hl
+  djnz .clearline
+
+  ld   bc,(v_charstart)
+  push de
+  ld   hl,(v_charstart)
+  ld   de,COLS
+  add  hl,de
+  ex   de,hl
+  call displayRepaint
+  pop  de
+
   call displayDoScroll
 
 .noscroll:
