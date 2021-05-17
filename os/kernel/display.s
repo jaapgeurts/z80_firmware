@@ -46,8 +46,10 @@ ILI_MASK_MADCTL_MH  equ 0x04
   section .bss
     ; display
     ; must be at the top so it can be aligned correctly by the linker
-    v_screenbuf:  dsb TOTALCHARS ;keep at 0xf000 so we can use a mask on the cursor
+    v_screenbuf:  dsb TOTALCHARS ; circular buffer: keep at 0xf000 so we can use a mask on the cursor
     v_cursor:     dsw 1 ; from 0-TOTALCHARS
+    v_linestart:  dsb 1 ; the row where the buffer ends
+    v_charstart:  dsw 1 ; the character where the buffer ends (= v_linestart * COLS)
     vt_xstart:    dsw 1
     vt_ystart:    dsw 1
     v_foreground: dsw 1
@@ -83,7 +85,7 @@ putDisplayChar:
   ld   c,COLS
   push de
   ex   de,hl ; put cursor in hl
-  call division ; a = remainder
+  call divide ; a = remainder
   or   a ; clear carry flag
   ld   b,0
   ld   c,a
@@ -104,7 +106,6 @@ putDisplayChar:
   jr   .end_nodraw
 
 .placeChar
-  push de  ; store start location
   ld   h,d ; ld   hl,de
   ld   l,e
   ; add cursor index to screenbuf start
@@ -112,20 +113,14 @@ putDisplayChar:
   ld   a,h
   or   SCREEN_BASE_MASK_H
   ld   h,a
-  ld   (hl),c ; save char
+  ld   (hl),c ; save char in buffer
   inc  de
 
   call checkScrollCursor
-
-  ld   (v_cursor),de
-  pop  bc ; load original cursor back
-
-  or   a ; clear carry
-  ld   hl,(v_cursor)
-  sbc  hl,bc
-  jr   z,.end_nodraw
-  jp   m,.end_nodraw ; TODO: why is start after the end?
   
+  ld   bc,(v_cursor); v_cursor still has old start location
+  ld   (v_cursor),de
+
   ; update screen
   call displayRepaint ; bc start; de end
 
@@ -135,72 +130,6 @@ putDisplayChar:
   pop  hl
   ret
 
-initDisplay:
-  push bc
-
-  ld   bc,0
-  ld   (v_cursor),bc
-
-
-  ld   a,0x01   ; reset TFT display
-  out  (TFT_C),a
-
-  ld   b,0xff
-delay1:
-  djnz  delay1
-
- ; TODO: print what has been detected
-;  ld   a,ILI_REG_RDID4  ; read id
-;  out  (TFT_C),a
-;  in   a,(TFT_D); dummy data
-;  in   a,(TFT_D) ; not relevant
-;  in   a,(TFT_D)
-;  call printhex
-;  in   a,(TFT_D)
-;  call printhex
-
-; TODO: reduce by writing a loop and sending data from an array
-  ld   a,ILI_REG_DISOFF  ; dpy off
-  out  (TFT_C),a
-
-  ld   a,ILI_REG_SLPOUT   ; wake up
-  out  (TFT_C),a
-
-  ld   a,ILI_REG_WRCTRLD   ; CTRL display
-  out  (TFT_C),a ; 
-  ld   a,0b00100100
-  out  (TFT_D),a
-
-  ld   a,ILI_REG_WRDISBV   ; write brightness
-  out  (TFT_C),a ; 
-  ld   a,0xff
-  out  (TFT_D),a
-   
-  ld   a,ILI_REG_MADCTL     ; set address mode
-  out  (TFT_C),a
-  ;ld   a,0b00100000
-  ld   a,ILI_MASK_MADCTL_MY | ILI_MASK_MADCTL_ML
-  out   (TFT_D),a
-
-  ld   a,ILI_REG_COLMOD
-  out  (TFT_C),a ; set pixel format
-  ld   a,0b00000101
-  out  (TFT_D),a
-
-  ld   a,ILI_REG_NORON
-  out  (TFT_D),a
-
-  ld   b,0xff
-delay2:
-  djnz  delay2
-
-  ld   a,ILI_REG_DISON  ; dpy on
-  out  (TFT_C),a
-
-  pop  bc
-  ret
-
-
 ; push the string into the buffer; then redraw the screen
 ; string in hl
 printd: 
@@ -209,7 +138,7 @@ printd:
   push de
 
   ld  de,(v_cursor) ; remember start pos
-  ld  (v_tmp),de
+;  ld  (v_tmp),de
 
   ; add cursor index to screenbuf start
   ld   a,d
@@ -235,9 +164,9 @@ printd:
   ld   h,a
 
   ld   c,COLS
-  call division ; a = remainder
+  call divide ; a = remainder
   scf
-  ccf ; clear carry flag
+  ccf ; clear carry flag ; TODO: or a
   ld   b,0
   ld   c,a
   ex   de,hl ; ld hl with v_cursor(de)
@@ -264,19 +193,28 @@ printd:
   add  hl,de
   ex   de,hl  ;push result back into de (screen_buf ptr)
 
-  ; restore screenprt
+  call checkScrollCursor
+
+  ; restore screenptr
   ld   a,d
   or   SCREEN_BASE_MASK_H
   ld   d,a
-
-  call checkScrollBuffer
 
   pop  hl ; restore the str pointer
   jr   .endif
 .storeChar:
   ld   (de),a
   inc  de
-  call checkScrollBuffer
+  
+  ld   a,d ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   d,a
+  call checkScrollCursor
+  ; restore screenptr
+  ld   a,d
+  or   SCREEN_BASE_MASK_H
+  ld   d,a
+
 .endif:
   djnz .printd_loop
 
@@ -284,15 +222,19 @@ printd:
   ld   a,d ; convert screen_buf ptr into cursor
   and  SCREEN_PTR_MASK_H
   ld   d,a
+
+  ld   bc,(v_cursor); v_cursor still contains initial start
   ld   (v_cursor),de
   
   ; if both are same, then don't paint
   ; TODO: bugfix for CR
-  ld   hl,(v_tmp)
+  or   a ; clear carry
+  ld   h,b
+  ld   l,c
   sbc  hl,de
   jr   z,.skippaint
 
-  ld   bc,(v_tmp)
+;  ld   bc,(v_tmp)
 ;  ld   de,(v_cursor)
   call displayRepaint
 .skippaint:
@@ -306,13 +248,44 @@ checkScrollCursor:
   push hl
   push bc
 
+  ; if de is over the edge
+  ; reset to start
+  ld   a,d
+  cp   TOTALCHARS >> 8
+  jr   nz, .endrollover
+  ld   a,e
+  cp   TOTALCHARS & 0xff
+  jr   nz, .endrollover
+  ld   de,0 ; set DE to 0
+.endrollover:
+
+  ld  bc,(v_cursor)
+
+ ; check if we've crossed the bounds
   or   a ; clear carry
-  ; check if screen if de > 1200 then scroll
-  ld   hl, TOTALCHARS-1
+  ; check if screen is part charstart
+  ld   hl, (v_charstart)
   sbc  hl,de
   ; hl contains result
-  jp   p,.noscroll 
+  jp   m,.checkscroll1 ; de is before the linestart so no scroll
+  jr  .noscroll
+.checkscroll1:
+  ; cursor is after linestart
+  or   a ; clear carry
+  ld   hl,(v_charstart) ; check if bc is before linestart
+  sbc  hl,bc
+  jr   z,.checkscroll2
+  jp   p, .doscroll ; if before start then must scroll
+.checkscroll2
+  ; bc was after the start, one more check
+  ; check if bc < de
+  or   a ; clear carry
+  ld   h,d
+  ld   l,e
+  sbc  hl,bc    
+  jp   p,.noscroll
 
+.doscroll:
   call displayDoScroll
 
 .noscroll:
@@ -320,35 +293,11 @@ checkScrollCursor:
   pop  hl
   ret 
 
-; TODO: there are two versions; check if we can merge
-checkScrollBuffer:
+
+; scroll display
+displayDoScroll:
   push hl
   push bc
-
-  or   a ; clear carry
-  ; check if screen if de >= 1200 then scroll
-  ld   hl, (v_screenbuf+TOTALCHARS)-1
-  sbc  hl,de
-  ; hl contains result
-  jp   p,.noscroll 
-
-  call displayDoScroll
-
-  ; reset de
-  ; sub TOTALCHARS from de
-  or   a ; clear carry
-  ld   hl,TOTALCHARS
-  ex   de,hl
-  sbc  hl,de
-  ex   de,hl
-
-.noscroll:
-  pop  bc
-  pop  hl
-  ret
-
-displayDoScroll:
-   call displayScrollBuffer
 
 ; *** SOFTWARE SCROLLING
 ; When software scrolling is in use we have to repaint all
@@ -361,32 +310,44 @@ displayDoScroll:
 
 ;*** HARDWARE SCOLLING
 
-  ; set direction reverse
-;   ld   a,ILI_REG_MADCTL
-;   out  (TFT_C),a
-;   ld   a, ILI_MASK_MADCTL_ML  | ILI_MASK_MADCTL_MY
-;   out  (TFT_D),a
+  ; increase scroll lines
+  ld   bc,COLS
+  ld   hl,(v_charstart)
+  add  hl,bc
+  ld   a,(v_linestart)
+  inc  a
+
+  ; if v_linestart == ROWS ; reset to top row
+  cp   ROWS
+  jr   nz,.doscroll
+
+  ld   a,0 ; reset v_linestart to 0
+  ld   hl,0
+
+.doscroll:
+  ld   (v_linestart),a
+  ld   (v_charstart),hl
+
+  ld   b,FONTH
+  ld   c,a
+  call multiply
 
   ld   a,ILI_REG_VSCRSADD
   out  (TFT_C),a
-  ld   a, (FONTH * SCROLL_NUM_LINES) >> 8
+  ld   a, h
   out  (TFT_D),a
-  ld   a, (FONTH * SCROLL_NUM_LINES) & 0xFF
+  ld   a, l
   out  (TFT_D),a
-
-;   ld   a,ILI_REG_MADCTL
-;   out  (TFT_C),a
-;   ld   a, ILI_MASK_MADCTL_MY
-;   out  (TFT_D),a
-
 
 ;*** END HARDWARE SCOLLING
 
-
-
+  pop  bc
+  pop  hl
   ret
 
 ; bc: start, de: end
+; end can be before start in case of rollover
+; of the circular buffer
 displayRepaint:
   push hl
   push bc
@@ -397,13 +358,13 @@ displayRepaint:
   add  hl,de ; save end location
   ld   (v_tmp2),hl
 
-  ; calculate startx = (start%COLS ) * fontw
-  ; calculate starty = (start/COLS) * fonth
+  ; calculate vt_xstart = (start%COLS ) * fontw
+  ; calculate vt_ystart = (start/COLS) * fonth
   push bc
   ld   h,b ; ld hl,bc
   ld   l,c
   ld   c,COLS
-  call division ; hl / c = hl rem a
+  call divide ; hl / c = hl rem a
   push hl ; push quotient (y)
   ; calc x
   ld   b,a
@@ -419,7 +380,7 @@ displayRepaint:
   
   ; go through the array. if dirty draw
 
-  pop  bc
+  pop  bc ; restore start
   ld   hl,v_screenbuf
   add  hl,bc
   ld   b,h
@@ -495,8 +456,31 @@ displayRepaint:
   pop  bc
   
   ; done with the glyph. goto next cell
-  inc  bc   ; if bc < 1200 continue at .incxy
-  ld   de,(v_tmp2)
+  inc  bc
+
+  ld   a,b ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   b,a
+
+  ; if BC == 1200 => BC = 0
+  ld   a,b
+  cp   TOTALCHARS >> 8
+  jr   nz, .ifatend
+  ld   a,c
+  cp   TOTALCHARS & 0xff
+  jr   nz, .ifatend
+  ld   bc,0 ; set BC to 
+
+
+.ifatend
+
+  ; restore screenptr
+  ld   a,b
+  or   SCREEN_BASE_MASK_H
+  ld   b,a
+
+
+  ld   de,(v_tmp2) ; if BC == DE quit, else continue
   ld   a,b
   cp   d
   jr   nz,.incxy
@@ -569,6 +553,8 @@ displayClear:
   call displayClearScreen
   ld   bc,0
   ld   (v_cursor),bc
+  ld   a,0
+  ld   (v_linestart),a
   pop  bc
   ret
 
@@ -623,37 +609,75 @@ displayClearScreen:
   pop  bc
   ret
 
-; scroll text buffer
-displayScrollBuffer:
-  push hl
+initDisplay:
   push bc
-  push de
 
-  ld   bc,TOTALCHARS - SCROLL_NUM_CHARS ; scroll quarter of the screen
-  ld   de,v_screenbuf
-  ld   hl,v_screenbuf + SCROLL_NUM_CHARS
-.dpyLoopScroll:
-  ld   a,(hl)
-  ld   (de),a
-  inc  hl
-  inc  de
-  dec  bc
-  ld   a,b
-  or   c
-  jr   nz,.dpyLoopScroll
+  ld   bc,0
+  ld   (v_cursor),bc
+  ld   (v_charstart),bc
 
-; clear last line
-  ld   b,SCROLL_NUM_CHARS
-  ld   hl,v_screenbuf + TOTALCHARS-SCROLL_NUM_CHARS
-.dpyLoopEmpty
-  ld   (hl),0
-  inc  hl
-  djnz .dpyLoopEmpty
+  ld   a,0
+  ld   (v_linestart),a
 
-  pop  de
+
+  ld   a,0x01   ; reset TFT display
+  out  (TFT_C),a
+
+  ld   b,0xff
+delay1:
+  djnz  delay1
+
+ ; TODO: print what has been detected
+;  ld   a,ILI_REG_RDID4  ; read id
+;  out  (TFT_C),a
+;  in   a,(TFT_D); dummy data
+;  in   a,(TFT_D) ; not relevant
+;  in   a,(TFT_D)
+;  call printhex
+;  in   a,(TFT_D)
+;  call printhex
+
+; TODO: reduce by writing a loop and sending data from an array
+  ld   a,ILI_REG_DISOFF  ; dpy off
+  out  (TFT_C),a
+
+  ld   a,ILI_REG_SLPOUT   ; wake up
+  out  (TFT_C),a
+
+  ld   a,ILI_REG_WRCTRLD   ; CTRL display
+  out  (TFT_C),a ; 
+  ld   a,0b00100100
+  out  (TFT_D),a
+
+  ld   a,ILI_REG_WRDISBV   ; write brightness
+  out  (TFT_C),a ; 
+  ld   a,0xff
+  out  (TFT_D),a
+   
+  ld   a,ILI_REG_MADCTL     ; set address mode
+  out  (TFT_C),a
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_MY | ILI_MASK_MADCTL_ML
+  out   (TFT_D),a
+
+  ld   a,ILI_REG_COLMOD
+  out  (TFT_C),a ; set pixel format
+  ld   a,0b00000101
+  out  (TFT_D),a
+
+  ld   a,ILI_REG_NORON
+  out  (TFT_D),a
+
+  ld   b,0xff
+delay2:
+  djnz  delay2
+
+  ld   a,ILI_REG_DISON  ; dpy on
+  out  (TFT_C),a
+
   pop  bc
-  pop  hl
   ret
+
 
   section .rodata
 allletters:

@@ -1,9 +1,10 @@
   section .text
 
   global multiply
-  global division
+  global divide
 
 ;   hl = b * c
+; TODO: improve to fast multiply
 multiply:
   push de
   push bc
@@ -22,7 +23,7 @@ multiply:
   ret
 
 ; hl by c, quotient in hl, remainder in a
-division:
+divide:
   push bc
   xor	a
   ld	b, 16
