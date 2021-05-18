@@ -57,7 +57,10 @@ CTRLU           EQU     015H            ; Control "U"
 ESC             EQU     01BH            ; Escape
 DEL             EQU     07FH            ; Delete
 
-
+GETC     equ 0x0008 ; RST 1 getKey
+PUTC     equ 0x0010 ; RST 2 putChar
+PRINTK   equ 0x0018 ; RST 3 printk
+READLINE equ 0x0020 ; RST 4 readline
 
 ;*************************************************************
 ; *** ZERO PAGE SUBROUTINES ***
@@ -1570,7 +1573,8 @@ OUTC2:
 ;        OUT (SerialPort),A		;SEND THE BYTE
         pop  af
         push af
-        CALL putChar
+        ;CALL putChar
+        RST   PUTC
         pop  af
         CP CR
         RET NZ
@@ -1753,7 +1757,7 @@ TX_RDY:
 
 ;-------------------------------------------------------------------------------
 RX_RDY:
-  call getKey
+  RST  GETC
   ret
 
 ;-------------------------------------------------------------------------------

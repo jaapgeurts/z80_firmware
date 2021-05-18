@@ -183,7 +183,6 @@ welcome:
   ld   hl,url_msg
   call prints
 
-  call displayClearBuffer
   call displayClear
 
 ; set leds to 7
@@ -217,8 +216,7 @@ main_loop:
   push hl ; save str ptr
   push bc ; save token counters
 
-  push hl
-  pop  de ; ld de,hl
+  ex   de,hl
   ld   hl, command_table
 .search_table
   ld   b,0    upper byte of bc
@@ -253,7 +251,7 @@ main_loop:
   ld   iy,main_loop ; push return address
   pop  bc ; restore token counters
   pop  de ; the str
-  push iy
+  push iy ; push return address
   jp   (hl)  ; jump to function pointer; de is the start of the arg string; hl points to function
 
 menu_help:
@@ -266,7 +264,7 @@ menu_halt:
   call printk
   halt
 
-; TODO: improve this (a*10+b)
+; TODO: improve this
 menu_date:
   ; print date
   ld   hl,v_timestruct
