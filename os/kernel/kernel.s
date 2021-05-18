@@ -862,7 +862,7 @@ putChar:
 
 rom_msg:          db 22,"Z80 ROM Monitor v0.6",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
-url_msg:          db 44,"github.com/jaapgeurts/z80_computer",CR,LF
+url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
 help_msg:         db 71,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>, cls",CR,LF
 halted_msg:       db 13,"System halted"
 prompt_msg:       db 2, "> "

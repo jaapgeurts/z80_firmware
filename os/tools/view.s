@@ -39,12 +39,19 @@ ILI_DPY_ON         equ 0x29
 ILI_SET_COLADR     equ 0x2a
 ILI_SET_ROWADR     equ 0x2b
 ILI_MEM_WRITE      equ 0x2c
-ILI_MEM_ACCESS_CTL equ 0x36
+ILI_REG_MADCTL equ 0x36
 ILI_DPY_VSSA       equ 0x37
 ILI_PXL_FMT        equ 0x3a
 ILI_SET_DPY_BRIGHT equ 0x51
 ILI_DPY_CTRL_VAL   equ 0x53
 ILI_READ_ID4       equ 0xd3
+
+ILI_MASK_MADCTL_MY  equ 0x80
+ILI_MASK_MADCTL_MX  equ 0x40
+ILI_MASK_MADCTL_MV  equ 0x20
+ILI_MASK_MADCTL_ML  equ 0x10
+ILI_MASK_MADCTL_BGR equ 0x08
+ILI_MASK_MADCTL_MH  equ 0x04
 
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
@@ -62,6 +69,12 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
   ld   a,PSG_ENABLE
   ld   b,0b10111111
   call psgWrite
+
+  ld   a,ILI_REG_MADCTL     ; set address mode
+  out  (TFT_C),a
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MV
+  out   (TFT_D),a
 
   call initCompactFlash
 
@@ -110,6 +123,12 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
 
   ld   a,0b00110011; int, timer, scale 256, rising, autostart,timeconst,cont,vector
   out  (CTC_B),a
+
+  ld   a,ILI_REG_MADCTL     ; set address mode
+  out  (TFT_C),a
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MY
+  out   (TFT_D),a
 
   pop  de
   pop  bc
