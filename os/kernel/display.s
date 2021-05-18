@@ -252,12 +252,12 @@ checkScrollCursor:
   ; reset to start
   ld   a,d
   cp   TOTALCHARS >> 8
-  jr   nz, .endrollover
+  jr   nz, .endCheckWrap
   ld   a,e
   cp   TOTALCHARS & 0xff
-  jr   nz, .endrollover
+  jr   nz, .endCheckWrap
   ld   de,0 ; set DE to 0
-.endrollover:
+.endCheckWrap:
 
   ld  bc,(v_cursor)
 
@@ -287,27 +287,6 @@ checkScrollCursor:
 
 .doscroll:
 
-  ; clear last line
-  ld   b,COLS
-  ld   hl,(v_charstart)
-  ; restore screenptr
-  ld   a,h
-  or   SCREEN_BASE_MASK_H
-  ld   h,a  
-.clearline:
-  ld   (hl),0
-  inc  hl
-  djnz .clearline
-
-  ld   bc,(v_charstart)
-  push de
-  ld   hl,(v_charstart)
-  ld   de,COLS
-  add  hl,de
-  ex   de,hl
-  call displayRepaint
-  pop  de
-
   call displayDoScroll
 
 .noscroll:
@@ -331,6 +310,37 @@ displayDoScroll:
 ;**** END SOFTWARE SCROLLING
 
 ;*** HARDWARE SCOLLING
+
+  ; clear last line
+  ld   b,COLS
+  ld   hl,(v_charstart)
+  ; restore screenptr
+  ld   a,h
+  or   SCREEN_BASE_MASK_H
+  ld   h,a  
+.clearline:
+  ld   (hl),0
+  inc  hl
+  djnz .clearline
+
+  ; repaint cleared line
+  ld   bc,(v_charstart)
+  push de
+  ; wrap de if necessary
+  ld   a,(v_linestart)
+  cp   ROWS-1
+  jr   nz,.addCols
+  ld   de,0
+  jr   .doClear
+.addCols:
+  ld   hl,(v_charstart)
+  ld   de,COLS
+  add  hl,de
+  ex   de,hl
+.doClear:
+  call displayRepaint
+  pop  de
+
 
   ; increase scroll lines
   ld   bc,COLS
@@ -408,7 +418,7 @@ displayRepaint:
   ld   b,h
   ld   c,l; ld bc,hl: bc contains start location in screenbuf
 
-.nextGlyph:
+.startGlyph:
 
   ; set display start and end position
   push bc
@@ -487,32 +497,30 @@ displayRepaint:
   ; if BC == 1200 => BC = 0
   ld   a,b
   cp   TOTALCHARS >> 8
-  jr   nz, .ifatend
+  jr   nz, .checkWrap
   ld   a,c
   cp   TOTALCHARS & 0xff
-  jr   nz, .ifatend
+  jr   nz, .checkWrap
   ld   bc,0 ; set BC to 
 
-
-.ifatend
+.checkWrap:
 
   ; restore screenptr
   ld   a,b
   or   SCREEN_BASE_MASK_H
   ld   b,a
 
-
   ld   de,(v_tmp2) ; if BC == DE quit, else continue
   ld   a,b
   cp   d
-  jr   nz,.incxy
+  jr   nz,.nextGlyph
   ld   a,c
   cp   e
-  jr   nz,.incxy
+  jr   nz,.nextGlyph
   ; done drawing
   jr   .printLetEnd
 
-.incxy:
+.nextGlyph:
 
   ld  hl,(vt_xstart)
   ld  de,FONTW
@@ -532,7 +540,7 @@ displayRepaint:
   ld  hl,0  ;set x-start to zero
 .next1:
   ld  (vt_xstart),hl
-  jp  .nextGlyph
+  jp  .startGlyph
 
 .printLetEnd:
   pop  de
@@ -575,8 +583,16 @@ displayClear:
   call displayClearScreen
   ld   bc,0
   ld   (v_cursor),bc
+  ld   (v_charstart),bc
   ld   a,0
   ld   (v_linestart),a
+
+  ld   a,ILI_REG_VSCRSADD
+  out  (TFT_C),a
+  ld   a, 0
+  out  (TFT_D),a
+  out  (TFT_D),a
+
   pop  bc
   ret
 

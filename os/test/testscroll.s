@@ -21,16 +21,16 @@ TOTALCHARS equ 1200
   push bc
   push de
 
-  ld   bc,0
+  ld   bc,1160
   ld   (v_charstart),bc
   
 
   ld   hl,welcome_msg
   rst  PRINTK
 
-  ld   bc,1199
+  ld   bc,1159
   ld   (v_cursor),bc
-  ld   de,1200
+  ld   de,1160
 
   call checkScrollCursor
 
@@ -64,8 +64,8 @@ checkScrollCursor:
   ld   hl, (v_charstart)
   sbc  hl,de
   ; hl contains result
-  jr   z,.checkscroll1
-  jp   p,.noscroll ; de is before the linestart so no scroll
+  jr   z,.doscroll ; end is just over the linestart
+  jp   p,.noscroll ; end is before the linestart so no scroll
 .checkscroll1:
   ld   a,'1'
   rst PUTC
