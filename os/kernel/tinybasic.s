@@ -364,6 +364,11 @@ ST4:
 ; LINE, AND JUMP TO 'RUNTSL' TO DO IT.
 ;*************************************************************
 
+EXIT:
+        RST  0
+CLS:
+        CALL displayClear
+        JP   RSTART
 NEW:
         CALL ENDCHK                     ;*** NEW(CR) ***
         LD HL,TXTBGN
@@ -1540,11 +1545,11 @@ PU1:
 
 INIT:
         CALL SERIAL_INIT		;INITIALIZE THE SIO
-        LD D,19H
-PATLOP:
-        CALL CRLF
-        DEC D
-        JR NZ,PATLOP
+;         LD D,19H
+; PATLOP:
+;         CALL CRLF
+;         DEC D
+;         JR NZ,PATLOP
         SUB A
         LD DE,MSG1			;PRINT THE BOOT MESSAGES
         CALL PRTSTG
@@ -1638,6 +1643,10 @@ TAB1:                                   ;DIRECT COMMANDS
         DWA RUN
         DB 'NEW'
         DWA NEW
+        DB 'EXIT'
+        DWA EXIT
+        DB 'CLS'
+        DWA CLS
 TAB2:                                   ;DIRECT/STATEMENT
         DB 'NEXT'
         DWA NEXT
