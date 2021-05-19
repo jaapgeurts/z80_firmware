@@ -127,61 +127,6 @@ translateScancode:
    ld   a,(hl) ; return they key
    ret
 
-; handleKeyboard:
-
-;   push hl
-;   push bc
-;   ; translate scan code
-;   ; ignore release codes
-;   cp   0xf0 ; key release code
-;   jr   nz, .keyDown
-;   ; key was released
-;   call getKeyboardChar  ;read the next char
-;   cp   L_SHIFT
-;   jr   z,.read_kbd_unshifted:
-;   cp   R_SHIFT
-;   jr   nz,.read_kbd_end:
-; .read_kbd_unshifted:
-;   ld   a,0
-;   ld   (v_kbdstate),a
-;   jr   .read_kbd_end
-
-; .keyDown:
-;   ; if larger than 80; just store it otherwise translate
-;   cp   0x80
-;   jr   nc, .store
-;   push af
-;   cp   L_SHIFT
-;   jr   z,.read_kbd_set_shifted:
-;   cp   R_SHIFT
-;   jr   nz,.read_kbd_fetch:
-; .read_kbd_set_shifted:
-;   ld   a,1
-;   ld   (v_kbdstate),a
-;   pop  af
-;   jr   .read_kbd_end
- 
-; .read_kbd_fetch:
-;   ld   hl,trans_table_normal
-;   ld   a,(v_kbdstate)
-;   cp   1
-;   jr   nz,.read_kbd_fetch_2
-;   ld   hl,trans_table_shifted
-; .read_kbd_fetch_2:
-;   pop  af
-;   ld   b, 0
-;   ld   c, a
-;   add  hl, bc
-;   ld   a,(hl)
-
-; .store:
-;   call putKey  ; store the key in the ring buffer
-
-; .read_kbd_end:
-;   pop  bc
-;   pop  hl
-;   ret
-
 ; init the serial port
 initSerialKeyboard:
 

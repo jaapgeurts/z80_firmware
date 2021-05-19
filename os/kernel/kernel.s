@@ -853,7 +853,7 @@ putChar:
 
   section .rodata
 
-rom_msg:          db 22,"Z80 ROM Monitor v0.6",CR,LF
+rom_msg:          db 22,"Z80 ROM Monitor v0.7",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
 help_msg:         db 72,"Commands: help, load <addr>, dump <addr>, date, run <addr>, cls, basic",CR,LF
