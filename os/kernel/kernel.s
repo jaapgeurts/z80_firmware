@@ -96,10 +96,13 @@ CTC_ISR_Table:
   dw  ISR_Nothing ; free for user purposes
   dw  ISR_Nothing ; free for user purposes
 
+PIO_ISR_Table:
+  dw  ISR_Nothing ; not in use
+; padding
   dw  0 ; alignment word
   dw  0 ; alignment word
   dw  0 ; alignment word
-  dw  0 ; alignment word
+
 SIO_ISR_Table:
   ; Channel B
   dw  ISR_Nothing ; Channel B  TX Buf Empty

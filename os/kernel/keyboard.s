@@ -43,6 +43,21 @@ ISR_SerialB_Keyboard:
   ld   a,c ; c contains v_kbdstate
   and  ~KBD_MASK_RELEASE ; set release to false
   ld   (v_kbdstate),a 
+  ld   c,a
+  ;   read it and check what was being released
+  in   a,(SIO_BD)
+
+  ; check if left or right shift
+  cp   SC_L_SHIFT
+  jp   z,.shiftOff
+  cp   SC_R_SHIFT
+  jp   nz,.isr_kbd_end
+.shiftOff:
+  ; shift off
+  ld   a,c ; get keystate
+  and  ~KBD_MASK_SHIFT
+  ld   (v_kbdstate),a
+
   jp   .isr_kbd_end ; done
 
 .read_key:
@@ -55,6 +70,20 @@ ISR_SerialB_Keyboard:
   ld   (v_kbdstate),a
   jp  .isr_kbd_end
 .key_press:
+
+  ; check if left or right shift
+  cp   SC_L_SHIFT
+  jp   z,.shiftOn
+  cp   SC_R_SHIFT
+  jp   nz,.translate
+  ; shift on
+.shiftOn:
+  ld   a,c ; get keystate
+  or   KBD_MASK_SHIFT
+  ld   (v_kbdstate),a
+  jp   .isr_kbd_end
+
+.translate:
   call translateScancode
   ; put into ringbuffer
   call putKey
@@ -194,7 +223,7 @@ initSerialKeyboard:
 
   ld   a,0b00000010 ; prepare WR2 (interrupt vector)
   out  (SIO_BC),a
-  ld   a,0x10
+  ld   a,0x10 ; 
   out  (SIO_BC),a
 
   ret
