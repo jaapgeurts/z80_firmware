@@ -56,14 +56,19 @@ ILI_MASK_MADCTL_MH  equ 0x04
 DPYWIDTH equ 480
 DPYHEIGHT equ 320
 
-DELAY equ 20000 ; 10sec
+DELAY equ 20000 ; 20sec
 MAX_IMAGES equ 7 ; current absolute max is 109 photos
+
+v_millis equ 0xf571
 
   org 0x5000
 
   push hl
   push bc
   push de
+
+  ld   bc,(v_millis)
+  ld   (v_last),bc
 
     ; set port to A to input and port B to output
   ld   a,PSG_ENABLE
@@ -76,25 +81,17 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
   ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MV
   out   (TFT_D),a
 
+  ; reset scrolling
+  ld   a,ILI_DPY_VSSA
+  out  (TFT_C),a
+  ld   a, 0
+  out  (TFT_D),a
+  out  (TFT_D),a
+
   call initCompactFlash
 
   call viewImage
 
-  ld   a,0x53
-  ld   i,a
-
-  di
-
-  call initTimer
-
-  call initSerial
-
-  im   2; set interrupt mode 2
-
-  ei
-
-  ld   a,(imgindex)
-  ld   b,a
 .loop:
 
   ; read button
@@ -103,10 +100,28 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
   bit  0,a
   jr   z,.end ; if pushed 
 
-  ; has the boolean been flipped because of a delay elapsed?
+  ; has the boolean been flipped because interval elapsed?
+  ; if (current - last < interval)
+  ; loop
+  ld   hl,(v_millis)
+  ld   (v_current),hl
+  ld   de,(v_last)
+  or   a ; clear carry
+  sbc  hl,de
+  ld   de,DELAY
+  or   a
+  sbc  hl,de
+  jp   m,.loop
+
+  ld   de,(v_current)
+  ld   (v_last),de
   ld   a,(imgindex)
-  cp   b
-  jr   z,.loop
+  inc  a
+  cp   MAX_IMAGES
+  jr   nz,.dontinc
+  ld   a,0
+.dontinc:
+  ld   (imgindex),a
 
   ; yes, show next img
   ld   b,a ; store current num in b
@@ -120,10 +135,7 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
 
 .end:
 
-; stop the timer
-
-  ld   a,0b00110011; int, timer, scale 256, rising, autostart,timeconst,cont,vector
-  out  (CTC_B),a
+  ; reset display orientation
 
   ld   a,ILI_REG_MADCTL     ; set address mode
   out  (TFT_C),a
@@ -135,36 +147,6 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
   pop  bc
   pop  hl
   ret
-
-nextimage:
-
-  di
-
-  push hl
-  push bc
-  push af
-
-  ld   hl,(counter)
-  dec  hl
-  ld   a,h
-  or   l
-  jr   nz,.endisr
-
-  ld   a,(imgindex)
-  inc  a
-  cp   MAX_IMAGES
-  jr   nz,.skipreset
-  ld   a,0
-.skipreset:
-  ld   (imgindex),a
-  ld   hl,DELAY
-.endisr
-  ld   (counter),hl
-  pop  af
-  pop  bc
-  pop  hl
-  ei  ; re-enable interrupts
-  reti
 
 ; bc: start, de: end
 viewImage:
@@ -462,25 +444,6 @@ cfWaitDataReady:
   jr   nz,cfWaitDataReady
   ret
 
-initSerial:
-  ld   a,0b00000010 ; prepare WR2 (interrupt vector)
-  out  (SIO_BC),a
-  ld   a,0x10
-  out  (SIO_BC),a
-  ret
-
-initTimer:
-  ld   a,0b10110101; int, timer, scale 256, rising, autostart,timeconst,cont,vector
-  out  (CTC_B),a
-  ld   a,29 ; 1ms (0.00100694444444s) ; after 145ms skip one increment
-  out  (CTC_B),a
-
-  ld   a,0       ; set interrupt vector
-  out  (CTC_A),a
-  ld   a,0
-  out  (CTC_A),a
-
-  ret
 
 psgWrite:
   out  (PSG_REG),a
@@ -494,22 +457,13 @@ psgRead:
   ret
 
 
+
 imgindex:      db 0
 startsector:   dw 0
-counter:       dw DELAY
-
+v_last:        dw 0
+v_current:     dw 0
 welcome_msg:   db 12,"View image",CR,LF
 oneortwo_msg:  db 14,"Image number? "
 done_msg:      db 6,"Done",CR,LF
 hexconv_table: db "0123456789ABCDEF"
 
-  org 0x5300
-MYISR_TABLE:
-  dw  0
-  dw  nextimage
-  dw  0
-  dw  0
-
-  org 0x5310
-SIOISR_TABLE:
-  dw 0x0038

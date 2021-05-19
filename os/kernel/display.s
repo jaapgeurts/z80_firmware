@@ -587,15 +587,18 @@ displayClear:
   ld   a,0
   ld   (v_linestart),a
 
+  call displayResetScrolling
+
+  pop  bc
+  ret
+
+displayResetScrolling:
   ld   a,ILI_REG_VSCRSADD
   out  (TFT_C),a
   ld   a, 0
   out  (TFT_D),a
   out  (TFT_D),a
-
-  pop  bc
   ret
-
 
 displayClearBuffer:
   push hl

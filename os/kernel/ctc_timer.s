@@ -56,7 +56,6 @@ ISR_Timer1_IncCounter:
   ei
   reti
 
-
 initCTC:
 
   push af ; store af. it contains the baud rate time constant
