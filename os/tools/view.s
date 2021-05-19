@@ -103,7 +103,8 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
   bit  0,a
   jr   z,.end ; if pushed 
 
-  ld   a,(imgindex) ; if there is a change
+  ; has the boolean been flipped because of a delay elapsed?
+  ld   a,(imgindex)
   cp   b
   jr   z,.loop
 
@@ -471,7 +472,7 @@ initSerial:
 initTimer:
   ld   a,0b10110101; int, timer, scale 256, rising, autostart,timeconst,cont,vector
   out  (CTC_B),a
-  ld   a,29 ; 1ms (0.001006944..s)
+  ld   a,29 ; 1ms (0.00100694444444s) ; after 145ms skip one increment
   out  (CTC_B),a
 
   ld   a,0       ; set interrupt vector
@@ -491,6 +492,7 @@ psgRead:
   out  (PSG_REG),a
   in   a,(PSG_DATA)
   ret
+
 
 imgindex:      db 0
 startsector:   dw 0

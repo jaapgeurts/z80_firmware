@@ -27,6 +27,11 @@ SECTIONS {
      kernel.o(.isr_nmi)
   }
 
+  .isr_table : {
+      . = ALIGN(0x100);
+      kernel.o(.isr_table)
+  }
+
   .text : {
       *(.text)
   }

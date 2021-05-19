@@ -7,12 +7,16 @@
 L_SHIFT equ 0x12
 R_SHIFT equ 0x59
 
+KBD_MASK_PRESSED equ 0x01
+KBD_MASK_SHIFT   equ 0x02
+KBD_MASK_CAPS    equ 0x04
+KBD_MASK_CTRL    equ 0x08
+KBD_MASK_ALT     equ 0x10
+KBD_MASK_META    equ 0x20
 
   section .bss
 
-    dsect
-      v_shifted:    db 0 ; shift keystate
-    dend
+  v_kbdstate:    dsb 1 ; keyboard state
 
 
   section .text
@@ -28,11 +32,69 @@ getKeyboardChar:
   in   a,(SIO_BD)
   ret
 
-  ; init the serial port
+
+; KEYBOARD FUNCTIONS
+
+handleKeyboard:
+
+  push hl
+  push bc
+  ; translate scan code
+  ; ignore release codes
+  cp   0xf0 ; key release code
+  jr   nz, .keyDown
+  ; key was released
+  call getKeyboardChar  ;read the next char
+  cp   L_SHIFT
+  jr   z,.read_kbd_unshifted:
+  cp   R_SHIFT
+  jr   nz,.read_kbd_end:
+.read_kbd_unshifted:
+  ld   a,0
+  ld   (v_kbdstate),a
+  jr   .read_kbd_end
+
+.keyDown:
+  ; if larger than 80; just store it otherwise translate
+  cp   0x80
+  jr   nc, .store
+  push af
+  cp   L_SHIFT
+  jr   z,.read_kbd_set_shifted:
+  cp   R_SHIFT
+  jr   nz,.read_kbd_fetch:
+.read_kbd_set_shifted:
+  ld   a,1
+  ld   (v_kbdstate),a
+  pop  af
+  jr   .read_kbd_end
+ 
+.read_kbd_fetch:
+  ld   hl,trans_table_normal
+  ld   a,(v_kbdstate)
+  cp   1
+  jr   nz,.read_kbd_fetch_2
+  ld   hl,trans_table_shifted
+.read_kbd_fetch_2:
+  pop  af
+  ld   b, 0
+  ld   c, a
+  add  hl, bc
+  ld   a,(hl)
+
+.store:
+  call putKey  ; store the key in the ring buffer
+
+.read_kbd_end:
+  pop  bc
+  pop  hl
+  ret
+
+; init the serial port
 initSerialKeyboard:
 
   ld   a,0
-  ld   (v_shifted),a
+  ld   (v_kbdstate),a
 
 ; reset channel B
   ld   a, 0b00110000
@@ -63,63 +125,6 @@ initSerialKeyboard:
   ld   a, 0b11000001             ; recv enable; 8bits/char
   out  (SIO_BC), a
 
-  ret
-
-; KEYBOARD FUNCTIONS
-
-handleKeyboard:
-
-  push hl
-  push bc
-  ; translate scan code
-  ; ignore release codes
-  cp   0xf0 ; break code
-  jr   nz, .check7bit
-.read_kbd_break:
-  call getKeyboardChar  ;read the next char
-  cp   L_SHIFT
-  jr   z,.read_kbd_unshifted:
-  cp   R_SHIFT
-  jr   nz,.read_kbd_end:
-.read_kbd_unshifted:
-  ld   a,0
-  ld   (v_shifted),a
-  jr   .read_kbd_end
-
-.check7bit:
-  ; if larger than 80; just store it otherwise translate
-  cp   0x80
-  jr   nc, .store
-  push af
-  cp   L_SHIFT
-  jr   z,.read_kbd_set_shifted:
-  cp   R_SHIFT
-  jr   nz,.read_kbd_fetch:
-.read_kbd_set_shifted:
-  ld   a,1
-  ld   (v_shifted),a
-  pop  af
-  jr   .read_kbd_end
- 
-.read_kbd_fetch:
-  ld   hl,trans_table_normal
-  ld   a,(v_shifted)
-  cp   1
-  jr   nz,.read_kbd_fetch_2
-  ld   hl,trans_table_shifted
-.read_kbd_fetch_2:
-  pop  af
-  ld   b, 0
-  ld   c, a
-  add  hl, bc
-  ld   a,(hl)
-
-.store:
-  call putKey  ; store the key in the ring buffer
-
-.read_kbd_end:
-  pop  bc
-  pop  hl
   ret
 
 SQOT equ 0x27

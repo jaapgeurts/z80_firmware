@@ -14,7 +14,6 @@
 DUMP_ROWCOUNT    equ 0x10 ; 16 rows
 DUMP_BYTESPERROW equ 0x08 ; 8 bytes per row
 
-
 ; led masks
 LED1 equ 0x02
 LED2 equ 0x04
@@ -45,7 +44,6 @@ READLINE_BUF_SIZE equ 0x40 ; 64 chars
     readline_buf: dsb READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
     ; real time clock
     v_timestruct: dsb RTC_REG_COUNT ; time structure
-
   section .stack
     dsw STACK_SIZE
 
@@ -72,6 +70,7 @@ start:
 
   ; RST 7 or  Mode 1 ISR
   section .isr_int
+ISR_INT:
   di
   push af
   ; interrupts are already disabled
@@ -114,13 +113,40 @@ start:
   pop  af
   ei
   retn
-
   
   ; NMI ISR
   section .isr_nmi
   ei
   reti
-  
+
+; Unused because this timer is used baud rate generator and interrupts are
+; not enabled for Timer0
+ISR_Timer0:
+  reti
+
+; Timer 1 ISR can be found in ctc_timer.s
+ISR_Timer2:
+  reti
+
+ISR_Timer3:
+  reti
+
+; my isr table
+
+; TODO: ultimately setup this table into RAM
+; so it's easy redefinable by users
+  section .isr_table
+Main_ISR_Table:
+CTC_ISR_Table:  
+  dw  ISR_Timer0  ; interrupt is disabled in CTC because timer0 is baudrate gen. 
+  dw  ISR_Timer1_IncCounter  ; see ctc_timer.s
+  dw  ISR_Timer2 ; free for user purposes
+  dw  ISR_Timer3 ; free for user purposes
+
+SIO_ISR_Table:
+SIO_ISR_Main:
+  dw  ISR_INT
+
   section .text
 
 rom_entry:
@@ -171,8 +197,12 @@ rom_entry:
   ld   b,5<<1
   call setLed
 
-; setup interrupt
-  im 1
+; setup interrupts
+  ld   a,0x01
+  ld   i,a
+
+; enable interrupts
+  im 2
   ei
 
 welcome:
@@ -258,11 +288,6 @@ menu_help:
   ld   hl, help_msg
   call printk
   ret 
-
-menu_halt:
-  ld   hl, halted_msg
-  call printk
-  halt
 
 ; TODO: improve this
 menu_date:
@@ -863,8 +888,7 @@ putChar:
 rom_msg:          db 22,"Z80 ROM Monitor v0.6",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
-help_msg:         db 71,"Commands: help, halt, load <addr>, dump <addr>, date, run <addr>, cls",CR,LF
-halted_msg:       db 13,"System halted"
+help_msg:         db 72,"Commands: help, load <addr>, dump <addr>, date, run <addr>, cls, basic",CR,LF
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
 loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"
@@ -879,8 +903,6 @@ rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
 command_table:
 cmd_help:    db 4,"help"
              dw menu_help
-cmd_halt:    db 4,"halt"
-             dw menu_halt
 cmd_load:    db 4,"load"
              dw menu_load
 cmd_dump:    db 4,"dump"

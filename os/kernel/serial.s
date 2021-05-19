@@ -51,6 +51,11 @@ initSerialConsole:
   ld	a, 0b01101000            ; send enable
   out	(SIO_AC), a
 
+  ld   a,0b00000010 ; prepare WR2 (interrupt vector)
+  out  (SIO_BC),a
+  ld   a,0x08
+  out  (SIO_BC),a
+
   ret
 
 putSerialChar:

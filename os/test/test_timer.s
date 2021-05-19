@@ -11,7 +11,6 @@ CTC_A equ 0x00
 CTC_B equ 0x01
 CTC_C equ 0x02
 
-
 PSG_REG    equ 0x80
 PSG_DATA   equ 0x81
 PSG_ENABLE equ 7
@@ -20,6 +19,8 @@ PSG_PORTB  equ 15
 
 SIO_BD equ 0x41
 SIO_BC equ 0x43
+
+MILLIS_CORRECTION equ 145 ; at 145 ticks skip increment by 1. effectively 145->144
 
   org 0x4000
 
@@ -61,7 +62,7 @@ SIO_BC equ 0x43
   org 0x4100
 MYISR_TABLE:
   dw  0
-  dw  printdot
+  dw  IncCounter
   dw  0
   dw  0
 
@@ -70,37 +71,79 @@ MYISR_TABLE:
 SIOISR_TABLE:
   dw 0x0038
 
-printdot:
+IncCounter:
   di
-
   push hl
-  push bc
   push af
 
-  ld   hl,(counter)
-  dec  hl
-  ld   a,h
-  or   l
-  jr   nz,.endisr
+  ld   a,(v_millis_corr)
+  inc  a
+  cp   MILLIS_CORRECTION
+  jp   nz, .skipCorrection
+  ld   a,0
+  ld   (v_millis_corr),a
+  jp   .endInc
 
-  ld   a,(val)
-  cpl
-  ld   (val),a
-  and  0xfe
-  ld   b,a
-  call setLed
+.skipCorrection:
+  ; takes minimally 31  T states
+  ; maximally 129 T states
+  ld   hl,v_millis  ; 10
 
-;  ld   a,'.'
-;  rst  PUTC
-
-  ld   hl,1000
-.endisr
-  ld   (counter),hl
+  inc  (hl)         ; 11
+  ; byte 1
+  jp   nz,.endInc   ; 10
+  inc  hl           ; 6
+  inc  (hl)         ; 11
+  ; byte 2
+  jp   nz,.endInc   ; 10
+  inc  hl           ; 6
+  inc  (hl)         ; 11
+  ; byte 3
+  jp   nz,.endInc   ; 10
+  inc  hl           ; 6
+  inc  (hl)         ; 11
+  ; byte 4
+  jp   nz,.endInc   ; 10
+  inc  hl           ; 6
+  inc  (hl)         ; 11
+  
+.endInc:
   pop  af
-  pop  bc
   pop  hl
-  ei  ; re-enable interrupts
+  ei
   reti
+
+; printdot:
+;   di
+
+;   push hl
+;   push bc
+;   push af
+
+;   ld   hl,(counter)
+;   dec  hl
+;   ld   a,h
+;   or   l
+;   jr   nz,.endisr
+
+;   ld   a,(val)
+;   cpl
+;   ld   (val),a
+;   and  0xfe
+;   ld   b,a
+;   call setLed
+
+; ;  ld   a,'.'
+; ;  rst  PUTC
+
+;   ld   hl,1000
+; .endisr
+;   ld   (counter),hl
+;   pop  af
+;   pop  bc
+;   pop  hl
+;   ei  ; re-enable interrupts
+;   reti
 
 initSerial:
   ld   a,0b00000010 ; prepare WR2 (interrupt vector)
@@ -112,7 +155,7 @@ initSerial:
 initTimer:
   ld   a,0b10110101; int, timer, scale 256, rising, autostart,timeconst,cont,vector
   out  (CTC_B),a
-  ld   a,29 ; 1ms (0.001006944..s)
+  ld   a,29 ; 1ms (0.00100694444444s) ; after 145ms skip one increment
   out  (CTC_B),a
 
   ld   a,0       ; set interrupt vector
@@ -134,7 +177,10 @@ setLed:
   ret
 
 
-welcome_msg:   db 15,"Test program.",CR,LF
-counter:       dw  1000
+  org  0x4300
+v_millis:      dw  0
+               dw  0
+v_millis_corr: db  0
+welcome_msg:   db  13,"Timer test.",CR,LF
 val:           db  0
 mymsg:         db  19,"This is my world!",CR,LF
