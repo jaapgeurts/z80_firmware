@@ -70,65 +70,18 @@ start:
 
   ; RST 7 or  Mode 1 ISR
   section .isr_int
-ISR_INT:
-  di
-  push af
-  ; interrupts are already disabled
-
-  ; reset the interrupt in the SIO
-  ld   a,0b00111000
-  out  (SIO_AC),a
-
-.intisr_check_channel_a: ; ( main port)
-  ld   a, 0b00000000 ; write to WR1. Next byte is RR0
-  out  (SIO_AC), a
-  in   a,(SIO_AC)
-  bit  0, a
-  jr   z,.intisr_check_channel_b  ; no char available
-
-  ;  if char waiting in channel a
-  in   a,(SIO_AD)
-  call putKey
-  jr   .intisr_end
-
-.intisr_check_channel_b: ; (ps/2 keyboard)
-
-  ld   a, 0b00000000 ; write to WR0. Next byte is RR0
-  out  (SIO_BC), a
-  in   a,(SIO_BC)
-  bit  0, a
-  jr   z,.intisr_end  ; no char available
-  
-  ; if char waiting in channel b
-  in   a,(SIO_BD)
-  call handleKeyboard
-  ;call putKey
-  ;out  (SIO_AD),a
-
-  ; enable next char int
-  ld   a, 0b00100000 ; write to WR0. to reenable rx interrupt
-  out  (SIO_BC), a
-
-.intisr_end:
-  pop  af
   ei
-  retn
+  reti
+
   
   ; NMI ISR
   section .isr_nmi
   ei
-  reti
+  retn
 
-; Unused because this timer is used baud rate generator and interrupts are
-; not enabled for Timer0
-ISR_Timer0:
-  reti
-
-; Timer 1 ISR can be found in ctc_timer.s
-ISR_Timer2:
-  reti
-
-ISR_Timer3:
+; Empty ISR
+ISR_Nothing:
+  ei
   reti
 
 ; my isr table
@@ -138,14 +91,26 @@ ISR_Timer3:
   section .isr_table
 Main_ISR_Table:
 CTC_ISR_Table:  
-  dw  ISR_Timer0  ; interrupt is disabled in CTC because timer0 is baudrate gen. 
+  dw  ISR_Nothing  ; interrupt is disabled in CTC because timer0 is baudrate gen. 
   dw  ISR_Timer1_IncCounter  ; see ctc_timer.s
-  dw  ISR_Timer2 ; free for user purposes
-  dw  ISR_Timer3 ; free for user purposes
+  dw  ISR_Nothing ; free for user purposes
+  dw  ISR_Nothing ; free for user purposes
 
+  dw  0 ; alignment word
+  dw  0 ; alignment word
+  dw  0 ; alignment word
+  dw  0 ; alignment word
 SIO_ISR_Table:
-SIO_ISR_Main:
-  dw  ISR_INT
+  ; Channel B
+  dw  ISR_Nothing ; Channel B  TX Buf Empty
+  dw  ISR_Nothing ; Channel B  External Stat Change
+  dw  ISR_SerialB_Keyboard ; Channel B RX Char available
+  dw  ISR_Nothing ; Channel B  Special recv condition
+  ; Channel A
+  dw  ISR_Nothing ; Channel A  TX Buf Empty
+  dw  ISR_Nothing ; Channel A  External Stat Change
+  dw  ISR_SerialA_Console ; Channel A RX char available
+  dw  ISR_Nothing ; Channel A  Special recv condition
 
   section .text
 
