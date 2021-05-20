@@ -4,9 +4,13 @@
   global initDisplay
   global putDisplayChar
   global printd
+  global displayRepaint
   global displayClearBuffer
   global displayClearScreen
   global displayClear
+
+  global displaySetForeground
+  global displaySetBackground
 
 
 ; *********************
@@ -385,6 +389,9 @@ displayRepaint:
   push bc
   push de
 
+  ld   ix,(v_foreground)
+  ld   iy,(v_background)
+
   ; draw from start(bc) to end(de)
   ld   hl,v_screenbuf
   add  hl,de ; save end location
@@ -467,15 +474,15 @@ displayRepaint:
   ;and  0x80
   bit  7,a
   jr   z,.pix_off
-  ld   a,0xff   ; foreground white
+  ld   a,ixh   ; foreground white
   out  (TFT_D),a
-;  ld   a,0xff
+  ld   a,ixl
   out  (TFT_D),a
   jr   .continue
 .pix_off 
-  ld   a,0xf8  ; background blue TODO: move to var
+  ld   a,iyh  ; background blue TODO: move to var
   out  (TFT_D),a
-  ld   a,0x00
+  ld   a,iyl
   out  (TFT_D),a
 .continue: ;
   ld   a,d
@@ -577,6 +584,43 @@ displaySetY1Y2:
   out  (TFT_D),a
   ret
 
+displaySetBackground:
+  push hl
+  ld   hl,v_background
+  jp   displaySetColor
+
+displaySetForeground
+  push hl
+  ld   hl,v_foreground
+  jp   displaySetColor
+
+; set rgb color
+; HL pointer to v_foreground or v_background
+; B = red ; max lower 5 bits (0-31)
+; C = green ; max lower 6 bits (0-63)
+; D = blue ; max lower 5 bits (0-31)
+displaySetColor:
+  ; low byte
+  ld   a,c
+  sla  a ; shift A (green) left by 3
+  sla  a
+  sla  a
+  or   b ; combine with red
+  ld   (hl),a
+  inc  hl
+  ; high byte
+  sla  d ; shift D (blue) left by 3
+  sla  d
+  sla  d
+  ld   a,c 
+  srl  a  ; shift A (green) right by 3
+  srl  a
+  srl  a
+  or   d  ; combine
+  ld   (hl),a
+  pop  hl
+  ret 
+
 displayClear:
   push bc
   call displayClearBuffer
@@ -622,6 +666,9 @@ displayClearScreen:
   push de
   push hl
 
+;  ld   ix,(v_foreground)
+  ld   iy,(v_background)
+
   ld   hl,0
   ld   de,DPYWIDTH
   call displaySetX1X2
@@ -634,9 +681,9 @@ displayClearScreen:
   ld   d,3
   ld   bc,200
 .dpyClearLoop:
-  ld   a,0xf8  ; background blue TODO: move to var
+  ld   a,iyh  ; background blue TODO: move to var
   out  (TFT_D),a
-  ld   a,0x00
+  ld   a,iyl
   out  (TFT_D),a
   djnz .dpyClearLoop
   dec  c
@@ -659,6 +706,11 @@ initDisplay:
 
   ld   a,0
   ld   (v_linestart),a
+
+  ld   bc,0xf800
+  ld   (v_background),bc
+  ld   bc,0xffff
+  ld   (v_foreground),bc
 
 
   ld   a,0x01   ; reset TFT display

@@ -7,14 +7,20 @@
 SC_L_SHIFT equ 0x12
 SC_R_SHIFT equ 0x59
 
+; special codes
+SC_BAT_OK  equ 0xaa
 SC_RELEASE equ 0xf0
+SC_ACK     equ 0xfa
+SC_ERR     equ 0xfc
 
-KBD_MASK_RELEASE equ 0x01
-KBD_MASK_SHIFT   equ 0x02
-KBD_MASK_CAPS    equ 0x04
-KBD_MASK_CTRL    equ 0x08
-KBD_MASK_ALT     equ 0x10
-KBD_MASK_META    equ 0x20
+KBD_MASK_RELEASE  equ 0x01 ; for F0 codes
+KBD_MASK_EXTENDED equ 0x02 ; for E0 codes
+KBD_MASK_SHIFT    equ 0x04 ; for shift down
+KBD_MASK_CTRL     equ 0x08 ; for ctrl down 
+KBD_MASK_ALT      equ 0x10 ; for alt down
+KBD_MASK_META     equ 0x20 ; for meta down
+KBD_MASK_CAPS     equ 0x40 ; for caps lock ON
+KBD_MASK_NUM      equ 0x40 ; for num lock ON
 
   section .bss
 
@@ -75,7 +81,13 @@ ISR_SerialB_Keyboard:
   cp   SC_L_SHIFT
   jp   z,.shiftOn
   cp   SC_R_SHIFT
-  jp   nz,.translate
+  jp   z,.shiftOn
+  cp   SC_BAT_OK
+  jp   z,.isr_kbd_end
+  cp   SC_ACK
+  jp   z,.isr_kbd_end
+  ; none of the above so probably a normal key => translate it to ascii
+  jp   .translate
   ; shift on
 .shiftOn:
   ld   a,c ; get keystate

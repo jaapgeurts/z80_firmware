@@ -431,16 +431,55 @@ menu_cls:
 menu_basic:
   jp   BASIC_START
 
+; B = red ; max lower 5 bits (0-31)
+; C = green ; max lower 6 bits (0-63)
+; D = blue ; max lower 5 bits (0-31)
+menu_fgcolor:
+  call setColor
+  call displaySetForeground
+
+  ld   bc,0
+  ld   de,0 ; roll over from start to end
+  call displayRepaint
+  ret
+
+menu_bgcolor:
+  call setColor
+  call displaySetBackground
+
+  ld   bc,0
+  ld   de,0 ; roll over from start to end
+  call displayRepaint
+  ret
+
+setColor:
+  ld   h,d
+  ld   l,e
+; get the values
+  call nextToken
+  call parseDecStr
+  push af
+  call nextToken
+  call parseDecStr
+  push af
+  call nextToken
+  call parseDecStr
+  ld   d,a
+  pop  af
+  ld   c,a
+  pop  af
+  ld   b,a
+  ret
 
 ; parses an address string into hl
 ; input: HL : string
 ; returns address in HL
 getAddress:
-  push de
-  pop  hl ; ld hl,de
+  ld   h,d
+  ld   l,e ; ld hl,de
   call nextToken
-  push hl
-  pop  de ; put the str into de
+  ld   d,h
+  ld   e,l ; ld de,hl
   ld   a,c
   cp   0 ; no argument given.
   jr   nz,.getadr_start
@@ -561,6 +600,36 @@ loadProgram:
 ; rom library routines
 ;********************
 
+; returns result in a
+; IN: digit str
+parseDecStr:
+  push hl
+  push bc
+  push de
+  
+  ld   b,(hl) ; count in hl
+  ld   d,0
+  ld   a,0
+
+.loop:
+  sla  a  ; multiply by 10 as (d*8+d+d)
+  sla  a
+  sla  a  
+  add  d
+  add  d ; add the two more times
+  ld   d,a ; store results in d
+
+  inc  hl
+  ld   a,(hl)
+  sub  '0'
+  add  d
+  ld   d,a
+  djnz .loop
+
+  pop  de
+  pop  bc
+  pop  hl
+  ret
 
 ; parses a hex string(two values only)
 ; src str in bc
@@ -649,6 +718,10 @@ getToken: ; do not call directly
   ld   (hl),a
   ret
 
+; returns the next token in a string
+; IN: last token in HL
+; OUT: next token in HL
+; don't touch BC
 nextToken:
   push de
   ld   c,0
@@ -883,5 +956,9 @@ cmd_cls:     db 3,"cls"
              dw menu_cls
 cmd_basic:   db 5,"basic"
              dw menu_basic
+cmd_fgcolor: db 7,"fgcolor"
+             dw menu_fgcolor
+cmd_bgcolor: db 7,"bgcolor"
+             dw menu_bgcolor
 cmd_tab_end: db 0
 
