@@ -67,9 +67,6 @@ v_millis equ 0xf571
   push bc
   push de
 
-  ld   bc,(v_millis)
-  ld   (v_last),bc
-
     ; set port to A to input and port B to output
   ld   a,PSG_ENABLE
   ld   b,0b10111111
@@ -92,6 +89,10 @@ v_millis equ 0xf571
 
   call viewImage
 
+  ; set the last time to the current time
+  ld   bc,(v_millis)
+  ld   (v_last),bc
+
 .loop:
 
   ; read button
@@ -113,6 +114,7 @@ v_millis equ 0xf571
   sbc  hl,de
   jp   m,.loop
 
+  ; show next image
   ld   de,(v_current)
   ld   (v_last),de
   ld   a,(imgindex)
