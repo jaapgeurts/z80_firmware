@@ -47,7 +47,7 @@ SECTIONS {
     display.o(glyphs)
   }
 */
-  . = 0x2000;
+  . = 0x2800;
 
   .basic_text : {
     tinybasic.o(.basic_text)

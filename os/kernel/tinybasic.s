@@ -84,7 +84,7 @@ READLINE equ 0x0020 ; RST 4 readline
 
   section .basic_text
   
-  rorg 02000h
+  rorg 02800h
 
 BASIC_START:
 START:

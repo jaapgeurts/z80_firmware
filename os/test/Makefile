@@ -1,7 +1,9 @@
 ASM=vasmz80_oldstyle
 
-all: testpio testpsg testkbd testkbdread testtft testtimer testgetarg testscroll testcf
+all: testfiles testpio testpsg testkbd testkbdread testtft testtimer testgetarg testscroll testcf
 
+testfiles:
+	$(ASM) -z80asm -Fbin -o testfiles.bin testfiles.s
 
 testpio:
 	$(ASM) -z80asm -Fbin -o testpio.bin testpio.s

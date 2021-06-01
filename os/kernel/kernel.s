@@ -56,22 +56,27 @@ start:
 
 ; RST points
   section .rst_table
-  jp   getKey
+JT_1:
+  jp   getKey   ; 0x08
+  align 3     
+  jp   putChar  ; 0x10
   align 3
-  jp   putChar
+  jp   printk   ; 0x18
   align 3
-  jp   printk
+  jp   readLine ; 0x20
   align 3
-  jp   readLine
+  jp   StatFile ; 0x28
   align 3
-  ret
-  align 3
-  ret
+  ret           ; 0x30
 
   ; RST 7 or  Mode 1 ISR
   section .isr_int
   ei
   reti
+
+JT_2:
+  jp   initCompactFlash
+  jp   InitFAT
 
   
   ; NMI ISR
@@ -159,6 +164,7 @@ rom_entry:
   ld   b,4<<1
   call setLed
 
+
   call initSerialKeyboard
 
   ; set leds to 5
@@ -183,7 +189,7 @@ welcome:
 
   call displayClear
 
-; set leds to 7
+  ; set leds to 6
   ld   b,6<<1
   call setLed
 
