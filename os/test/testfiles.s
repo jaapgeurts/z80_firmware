@@ -7,6 +7,8 @@ PUTC     equ 0x0010 ; RST 2 putChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
+READFILE equ 0x002b ; 
+
 INIT_COMPACTFLASH equ 0x003b
 INIT_FAT          equ INIT_COMPACTFLASH+3
 
@@ -55,6 +57,35 @@ STATFILE  equ 0x0028
   cp   0xff
   jr   nz,.next
 
+  ld   hl, fname
+  ld   a,0 ; read whole file
+  ld   de,0x8000
+
+  call READFILE
+  jr   nz,.error2
+
+ cp   0
+  jr   nz,.error1
+  ld   hl,msg_start
+  rst  PRINTK
+
+  ld   a,b
+  call printhex
+  ld   a,c
+  call printhex
+
+
+  jr   .end
+  call 0x8000
+  jr   .end
+.error1:
+  ld   hl,msg_loaderr
+  rst  PRINTK
+  jr   .end
+.error2:
+  ld   hl,msg_loaderr2
+  rst  PRINTK
+
 .end:
   pop  de
   pop  bc
@@ -75,9 +106,40 @@ printlnz:
   ld   a,LF
   rst  PUTC
   ret
-  
 
-welcome_msg:   db 12,"Disk Test.",CR,LF
+printhex:
+  push af
+  srl  a
+  srl  a
+  srl  a
+  srl  a
+  call printhex_nibble
+  pop  af
+  call printhex_nibble
+  ret
+
+printhex_nibble: ; converts a nibble to hex char
+  push bc
+  push hl
+  ld   hl,hexconv_table
+  and  0x0F ; take bottom nibble only
+  ld   b,0
+  ld   c,a
+  adc  hl,bc
+  ld   a,(hl)
+printhex_end:
+  rst  PUTC
+  pop hl
+  pop bc
+  ret
+
+welcome_msg:    db 12,"Disk Test.",CR,LF
+msg_loaderr:    db 15,"loading err 1",CR,LF
+msg_loaderr2:   db 15,"loading err 2",CR,LF
+msg_start:      db 10,"starting",CR,LF
+hexconv_table:  db "0123456789ABCDEF"
+fname:          db "NEWS.TXT",0
 ; Ls vars
 file_count:		db 1
 total_size:		dw 2
+

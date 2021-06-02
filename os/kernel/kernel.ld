@@ -36,6 +36,9 @@ SECTIONS {
       *(.text)
   }
 
+  /* TODO: remove later */
+  . = 0x2000;
+
   .rodata1 : {
       *(.rodata)
   }
@@ -47,7 +50,9 @@ SECTIONS {
     display.o(glyphs)
   }
 */
-  . = 0x2800;
+
+  /* when changing this number also update the rorg directive in the basic source */
+  . = 0x3300; 
 
   .basic_text : {
     tinybasic.o(.basic_text)

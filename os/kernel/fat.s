@@ -51,12 +51,12 @@
     filename:		defs 8
     extension:		defs 3
     attribs:		defs 1
-    more_attribs:		defs 1
-    creation_millis:	defs 1
-    creation_h_m_s:		defs 2
-    creation_date:		defs 2
-    last_access_date:	defs 2
-    yet_more_attribs:	defs 2
+        more_attribs:		defs 1
+        creation_millis:	defs 1
+        creation_h_m_s:		defs 2
+        creation_date:		defs 2
+        last_access_date:	defs 2
+        yet_more_attribs:	defs 2
     last_write_time:	defs 2
     last_write_date:	defs 2
     starting_cluster:	defs 2
@@ -134,9 +134,9 @@ ReadVBR:
 	; The MBR contains the address of the first sector of partition 1
 	; Store this in memory for future reference, then read that sector
 	; (the VBR) into memory.
-	ld	ix, fat_sector_buffer+0x1BE
-	ld	c, (ix+0x08)
-	ld	a, c
+	ld	ix, fat_sector_buffer+0x1BE  ;partition entry 1
+	ld	c, (ix+0x08) ; LBA of first absolute sector in partition
+	ld	a, c  ; load into c directly for later use with cfREad
 	ld	(partition_start_sec+0), a
 	ld	b, (ix+0x09)
 	ld	a, b
@@ -178,7 +178,7 @@ ComputeSectors:
 	add	hl, bc			; Skip past first FAT
 	add	hl, bc			; Skip past second FAT
 	ld	(start_of_root_dir), hl
-	ld	bc, 32			; Skip past root directory - LAZY
+	ld	bc, 32			; TODO: Skip past root directory - LAZY
 	add	hl, bc
 	ld	(start_of_data), hl
 	ret
@@ -186,15 +186,31 @@ ComputeSectors:
 ;;;;;;;;;;;;
 
 ClusterToSector:
-	; Load b,c,d,e with the sector corresponding to the cluster in hl
-	ld	bc, (start_of_data)
-	add	hl, bc			; add 1 sector per cluster
+    ; first convert cluster in hl to sector
+
 	or	a			; Clear carry flag
 	ld	bc, 2
 	sbc	hl, bc			; Subtract 2 (clusters 0, 1 don't map to data region)
-	ld	b, h
-	ld	c, l
-	ld	de, 0
+
+    ; multiply by sec/cluster (4 for 32Mb disk)
+    ld  a,(sectors_per_cluster)
+    ex  de,hl
+
+    call multiply16
+    ; ahl now contains the sectors
+
+	ld	d, 0x00 ; de is high byte of sectors
+    ld  e,a
+
+	; Load b,c,d,e with the sector corresponding to the cluster in hl
+	ld	bc, (start_of_data) ; low byte
+	add	hl, bc			; add start offset to sector
+    
+    jr   nc,.nooverflow   ; if overflow add one to e
+    inc  e
+.nooverflow:
+	ld   b, h
+	ld   c, l
 	ret
 
 ;;;;;;;;;;;;

@@ -66,6 +66,7 @@ JT_1:
   jp   readLine ; 0x20
   align 3
   jp   StatFile ; 0x28
+  jp   ReadFile ; 0x2B
   align 3
   ret           ; 0x30
 
@@ -340,7 +341,16 @@ menu_date:
 
   ret
 
-menu_load:
+menu_fload:
+  call getAddress
+  ret  z
+
+  
+
+  ret
+
+; serial load
+menu_sload:
   call getAddress
   ret  z   ; result in hl, str in de
 
@@ -348,8 +358,8 @@ menu_load:
   ld   hl, loading_msg
   call printk
 
-  push de
-  pop  hl ; ld hl,de
+  ld   h,d
+  ld   l,e ; ld hl,de
   call printk
   call println
   
@@ -935,7 +945,7 @@ putChar:
 rom_msg:          db 22,"Z80 ROM Monitor v0.7",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
-help_msg:         db 72,"Commands: help, load <addr>, dump <addr>, date, run <addr>, cls, basic",CR,LF
+help_msg:         db 87,"Commands: help, sload <addr>, fload <addr>, dump <addr>, date, run <addr>, cls, basic",CR,LF
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
 loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"
@@ -950,8 +960,10 @@ rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
 command_table:
 cmd_help:    db 4,"help"
              dw menu_help
-cmd_load:    db 4,"load"
-             dw menu_load
+cmd_sload:   db 5,"sload"
+             dw menu_sload
+cmd_fload:   db 5,"fload"
+             dw menu_fload
 cmd_dump:    db 4,"dump"
              dw menu_dump
 cmd_date:    db 4,"date"

@@ -115,11 +115,8 @@ initCompactFlash:
 
   ld   a,0x04 ; reset
   out  (CF_STATCMD),a ;  
-  call cfWaitBusy
 
-  ld   a,0xe0 ; lba3=0, master,mode=lba
-  out  (CF_LBA3),a
-  
+  call cfWaitBusy
   ld   a,0x01      ; set 8 bit
   out  (CF_ERRFT),a
   
