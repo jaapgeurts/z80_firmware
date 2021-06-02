@@ -3,11 +3,11 @@
 ; https://github.com/lmaurits/lm512
 
 
-  global InitFAT
-  global StatFile
+  global initFAT
+  global statFile
   global FindFile
   global WriteFile
-  global ReadFile
+  global readFile
   global DeleteFile
   global AppendFile
   global CopyFile
@@ -82,55 +82,37 @@
 
   section .text
 
-; TODO: replace
-StrictStrCmp:
-	; Load next chars of each string
-	ld a, (de)
-	ld b, a
-	ld a, (hl)
-	; Compare
-	cp b
-	; Return non-zero if chars don't match
-	ret nz
-	; Check for end of both strings
-	cp 0x00
-	; Return if strings have ended
-	ret z
-	; Otherwise, advance to next chars
-	inc hl
-	inc de
-	jr StrictStrCmp
-
-; TODO: replace
-StrStrip:
-	ld a,(hl)
-	cp 0x00
-	jr z, StrStrip01
-	inc hl
-	jr StrStrip
-StrStrip01:
-	dec hl
-	ld a,(hl)
-	cp " "
-	jr nz,StrStripEnd
-	ld (hl),0x00
-	jr StrStrip01
-StrStripEnd:
-	inc hl
-	ret
+; ; TODO: replace
+; StrictStrCmp:
+; 	; Load next chars of each string
+; 	ld a, (de)
+; 	ld b, a
+; 	ld a, (hl)
+; 	; Compare
+; 	cp b
+; 	; Return non-zero if chars don't match
+; 	ret nz
+; 	; Check for end of both strings
+; 	cp 0x00
+; 	; Return if strings have ended
+; 	ret z
+; 	; Otherwise, advance to next chars
+; 	inc hl
+; 	inc de
+; 	jr StrictStrCmp
 
 
-InitFAT:
+initFAT:
 	ld	a, 0
 	ld	(fat_dirty), a
-ReadMBR:
+.readMBR:
 	; The MBR is the first sector of the disk.
 	ld	hl, fat_sector_buffer
 	ld	a, 01	; MBR is one sector
 	ld	bc, 00	; MBR starts at sector 0
 	ld	de, 00
 	call cfRead	; call CF_READ
-ReadVBR:
+.readVBR:
 	; The MBR contains the address of the first sector of partition 1
 	; Store this in memory for future reference, then read that sector
 	; (the VBR) into memory.
@@ -150,7 +132,7 @@ ReadVBR:
 	ld	a, 01	; VBR is one sector
 	ld	hl, fat_sector_buffer
 	call cfRead	; call CF_READ
-ReadBPB:
+.readBPB:
 	; The VBR contains essential information on the FAT filesystem
 	; Store all of this in memory for future reference
 	ld	hl, fat_sector_buffer+0x0B
@@ -545,13 +527,13 @@ MakeAvailEntry:
 ;;;;;;;;;;;;
 
 ZeroFilename:
-	ld	hl, filename
-	ld	a," "
-	ld	b, 11
-ZeroFilenameLoop:
-	ld	(hl), a
-	inc	hl
-	djnz	ZeroFilenameLoop
+	ld  hl, filename
+	ld   a," "
+	ld   b, 11
+.zeroname_loop:
+	ld   (hl), a
+	inc  hl
+	djnz .zeroname_loop
 	ret
 
 ;;;;;;;;;;;;
@@ -561,36 +543,55 @@ BuildFilenameString:
 	; version of the filename of the current dir entry.
 	; i.e. it removes padding from the filename, puts a
 	; period before extension and a slash after directories.
-	ld	hl, filename
-	ld	de, filename_buffer	; DE at filename, HL at dir entry
-	ld	bc, 8			; Copy 8 chars to filename buffer
-	ldir
-	ex	de, hl			; Terminate this 8 char string
-	ld	(hl), 0x00
-	ld	hl, filename_buffer	; Remove trailing whitespace
-	call	StrStrip
-	ld	de, extension		; Check if there is a file extension
-	ld	a, (de)
-	cp	" "
-	jr	z, BuildFilenameStringAddDirSlash
-	ld	(hl), "."		; Write the file extension separator
-	inc	hl
-	ex	de, hl			; Now HL=extension, DE=filename_buffer
-	ld	bc, 3			; Copy 3 chars (ext) to fname buffer
-	ldir
-	ex	de, hl			; Now HL=filename_buffer
-BuildFilenameStringAddDirSlash:
-	ld	a,(attribs)		; Get attribute byte
-	and	00010000b;		; Mask out the directory bit
-	jp	z, BuildFilenameEnd	; If not a dir, we're done
-	ld	(hl), "/"		; If we're a dir, add a slash
-	inc	hl
-BuildFilenameEnd:
+	ld   hl, filename
+	ld   de, filename_buffer	; DE at filename, HL at dir entry
+	ld	 c,0			; Copy max 8 chars to filename buffer
+    inc  de  ; next pos (first is for strlen)
+.loopcpy:
+    ld   a,(hl)
+    cp   " " ; is it a space
+    jr   z,.checkextension:
+    ld   (de),a
+    inc  hl
+    inc  de
+    inc  c
+    cp   8
+    jr   nz,.loopcpy
+.checkextension:
+    ex   de,hl  ; de = dir entry, hl = filename_buffer
+
+	ld   de, extension		; Check if there is a file extension
+	ld   a, (de)
+	cp   " "
+	jr   z, .addSlash
+    
+    ; append the extension.
+    ld   (hl),'.' 
+    inc  hl
+    inc  c
+    ld   b,3
+.loopcpyext:
+    ld   a,(de)
+    ld   (hl),a
+    inc  hl
+    inc  de
+    inc  c
+    djnz .loopcpyext
+
+.addSlash:
+	ld   a,(attribs)    ; Get attribute byte
+	and  00010000b;		; Mask out the directory bit
+	jp   z, .end	    ; If not a dir, we're done
+	ld   (hl), '/'		; If we're a dir, add a slash
+    inc  c
+.end:
 	; Terminate string
-	ld	(hl), 0x00
+    ld   a,c
+	ld	 (filename_buffer), a
 	ret
 
 ;;;;;;;;;;;;
+; TODO:fix this code too
 
 ReverseBuildFilenameString:
 	; This is the reverse of BuildFilenameString
@@ -665,7 +666,7 @@ SaveRootDir:
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-ReadFile:
+readFile:
 	; INPUTS
 	;
 	; A:  Number of consecutive sectors to read (0=whole file)
@@ -683,7 +684,7 @@ ReadFile:
 	ld	a, h
 	or	l
 	cp	0
-	jr	z, ReadFileContinue
+	jr	z, .readFileContinue
 
 	; Find file
 	call	FindFile
@@ -692,40 +693,40 @@ ReadFile:
 	call	SeekCluster
 	ld	a, 00
 	ld	(all_done), a
-	jr	FileNotEmpty
+	jr	.fileNotEmpty
 
-ReadFileContinue:
+.readFileContinue:
 	ld	a, (all_done)
 	cp	0xFF
-	jr	nz, FileNotEmpty
+	jr	nz, .fileNotEmpty
 	ld	a, 0
 	ld	bc, 0x0000
 	ld	de, (memory_pointer)
 	ret
 
-FileNotEmpty:
+.fileNotEmpty:
 	ld	hl, 0x0000
 	ld	(bytes_read), hl
 	ld	hl, (memory_pointer)
 
 	ex	af, af'
 	cp	0
-	jr	z, ReadWholeFileLoop
+	jr	z, .readWholeFileLoop
 
-ReadFilePartial:
+.readFilePartial:
 	ld	b, a
-ReadFilePartialLoop:
+.readFilePartialLoop:
 	push	bc
 	call	ReadSector
 	pop	bc
-	jr	z, ReadFileAdjustBytes
-	djnz	ReadFilePartialLoop
-	jr	ReadFileReturn
+	jr	z, .readFileAdjustBytes
+	djnz	.readFilePartialLoop
+	jr	.readFileReturn
 
-ReadWholeFileLoop:
+.readWholeFileLoop:
 	call	ReadSector
-	jr	nz, ReadWholeFileLoop
-ReadFileAdjustBytes:
+	jr	nz, .readWholeFileLoop
+.readFileAdjustBytes:
 	ld	a, 0xFF
 	ld	(all_done), a
 	ld	de, (size_in_bytes)
@@ -739,7 +740,7 @@ ReadFileAdjustBytes:
 	add	hl, de
 	ld	(bytes_read), hl
 
-ReadFileReturn:
+.readFileReturn:
 	ld	a, 0
 	cp		a	; Set zero flag
 	ex	de, hl
@@ -1075,7 +1076,7 @@ FindFileLoop:
 	call	BuildFilenameString
 	ld	hl, filename_buffer
 	ld	de, (target_filename_ptr)
-	call	StrictStrCmp
+	call	stringCompare
 	; If match, jump to end
 	jr	z, FindFileFound
 	; Otherwise check next entry
@@ -1159,36 +1160,36 @@ RenameAbort:
 
 ;;;;;;;;;;;;
 
-StatFile:
+statFile:
 	ld	b, a
 	ld	a, h
 	or	l
-	jr	z, StatFileSearch
+	jr	z, .statFileSearch
 	; HL points to a filename, find it
 	call	FindFile
 	ret	nz
-StatFilePopulateResults:
+.statFilePopulateResults:
 	call	BuildFilenameString
 	ld	hl, filename_buffer
 	ld	de, (size_in_bytes)
 	ld	bc, (size_in_bytes+2)
 	ld	a, 0
 	ret
-StatFileSearch:
+.statFileSearch:
 	ld	a, b
 	cp	0
-	jr	nz, StatFileSearchNext
+	jr	nz, .statFileSearchNext
 	call	ResetRootDir		; Jump to start of root dir
-StatFileSearchLoop:
+.statFileSearchLoop:
 	call	TestEndDir
-	jr	z, StatFileEnd
+	jr	z, .statFileEnd
 	call	TestFreeEntry
-	jr	z, StatFileSearchNext
+	jr	z, .statFileSearchNext
 	call	TestLFN
-	jr	nz, StatFilePopulateResults
-StatFileSearchNext:
+	jr	nz, .statFilePopulateResults
+.statFileSearchNext:
 	call	AdvanceDirEnt
-	jr	StatFileSearchLoop
-StatFileEnd:
+	jr	.statFileSearchLoop
+.statFileEnd:
 	ld	a, 0xFF
 	ret

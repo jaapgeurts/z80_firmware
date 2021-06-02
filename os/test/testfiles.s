@@ -49,7 +49,8 @@ STATFILE  equ 0x0028
   rst STATFILE
 
 .next:
-  call printlnz
+  rst  PRINTK
+  call println
 
   ld   hl,0x0000
   ld   a,1
@@ -64,19 +65,17 @@ STATFILE  equ 0x0028
   call READFILE
   jr   nz,.error2
 
- cp   0
+  cp   0
   jr   nz,.error1
   ld   hl,msg_start
   rst  PRINTK
 
-  ld   a,b
-  call printhex
-  ld   a,c
-  call printhex
+;   ld   a,b
+;   call printhex
+;   ld   a,c
+;   call printhex
 
-
-  jr   .end
-  call 0x8000
+  ;call 0x8000
   jr   .end
 .error1:
   ld   hl,msg_loaderr
@@ -93,14 +92,7 @@ STATFILE  equ 0x0028
   ret
 
 ; pointer in hl
-printlnz:
-  ld   a,(hl)
-  cp   0
-  jr   z, .done:
-  rst  PUTC
-  inc  hl
-  jr   printlnz
-.done:
+println:
   ld   a,CR
   rst  PUTC
   ld   a,LF
@@ -138,7 +130,7 @@ msg_loaderr:    db 15,"loading err 1",CR,LF
 msg_loaderr2:   db 15,"loading err 2",CR,LF
 msg_start:      db 10,"starting",CR,LF
 hexconv_table:  db "0123456789ABCDEF"
-fname:          db "NEWS.TXT",0
+fname:          db 11,"SETDATE.BIN"
 ; Ls vars
 file_count:		db 1
 total_size:		dw 2

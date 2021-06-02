@@ -13,7 +13,7 @@ PUTC     equ 0x0010 ; RST 2 putSerialChar
 PRINTK   equ 0x0018 ; RST 3 printk
 READLINE equ 0x0020 ; RST 4 readline
 
-  org 0x8000
+  org 0x4000
   push hl
   push bc
 

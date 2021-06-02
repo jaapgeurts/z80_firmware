@@ -33,6 +33,7 @@ READLINE_BUF_SIZE equ 0x40 ; 64 chars
   global putKey
   global getKey
   global putChar
+  global stringCompare
 
 ; variables
   section .bss
@@ -57,18 +58,19 @@ start:
 ; RST points
   section .rst_table
 JT_1:
-  jp   getKey   ; 0x08
+  jp   getKey        ; 0x08
+  jp   stringCompare ; 0x1b
   align 3     
-  jp   putChar  ; 0x10
+  jp   putChar       ; 0x10
   align 3
-  jp   printk   ; 0x18
+  jp   printk        ; 0x18
   align 3
-  jp   readLine ; 0x20
+  jp   readLine      ; 0x20
   align 3
-  jp   StatFile ; 0x28
-  jp   ReadFile ; 0x2B
+  jp   statFile      ; 0x28
+  jp   readFile      ; 0x2b
   align 3
-  ret           ; 0x30
+  ret                ; 0x30
 
   ; RST 7 or  Mode 1 ISR
   section .isr_int
@@ -77,7 +79,7 @@ JT_1:
 
 JT_2:
   jp   initCompactFlash
-  jp   InitFAT
+  jp   initFAT
 
   
   ; NMI ISR
@@ -341,13 +343,57 @@ menu_date:
 
   ret
 
-menu_fload:
-  call getAddress
-  ret  z
+menu_files:
+  ld   hl,slowflash_msg
+  call printk
 
-  
+  call initCompactFlash
+  call initFAT
+
+  ld   hl,0x0000 ; start at the beginning
+
+  ld   a,0 ; last action succeeded
+
+  call statFile
+
+.next:
+  call printk
+;   ld   hl,files_spacer_msg
+;   call printk
+;   ld   a,b
+;   call printhex
+;   ld   a,c
+;   call printhex
+  call println
+
+  ld   hl,0x0000 ; continue to read the next file
+  ld   a,1
+  call statFile
+  cp   0xff
+  jr   nz,.next
 
   ret
+
+menu_fload:
+  ld   h,d
+  ld   l,e ; ld hl,de
+  call nextToken
+  
+  ld   a,0 ; read whole file
+  ld   de,0x4000
+  call readFile
+  cp   0
+  jr   nz,.nosuchfile
+  jp   0x4000
+  
+
+.nosuchfile:
+  ld  hl,nosuchfile_msg
+  call printk
+
+  ret
+
+
 
 ; serial load
 menu_sload:
@@ -942,15 +988,18 @@ putChar:
 
   section .rodata
 
-rom_msg:          db 22,"Z80 ROM Monitor v0.7",CR,LF
+rom_msg:          db 22,"Z80 ROM Monitor v0.9",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
-help_msg:         db 87,"Commands: help, sload <addr>, fload <addr>, dump <addr>, date, run <addr>, cls, basic",CR,LF
+help_msg:         db 121,"Commands: help, sload <addr>, fload <addr>, dump <addr>, date, run <addr>, cls, basic, fgcolor <r g b>, bgcolor <r g b>",CR,LF
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
 loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"
 loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   db 20,"Error loading data",CR,LF
+nosuchfile_msg:   db 14,"No such file",CR,LF
+files_spacer_msg: db 3," : "
+slowflash_msg:    db 14,"Drive access",CR,LF
 argerror_msg:     db 27,"Wrong or missing argument",CR,LF
 error_checksum:   db 10,"Checksum",CR,LF
 hexconv_table:    db "0123456789ABCDEF"
@@ -960,6 +1009,8 @@ rom_time:         db 0,0,0,4,5,1,5,0,3,0,1,2,5
 command_table:
 cmd_help:    db 4,"help"
              dw menu_help
+cmd_files:   db 5,"files"
+             dw menu_files
 cmd_sload:   db 5,"sload"
              dw menu_sload
 cmd_fload:   db 5,"fload"
