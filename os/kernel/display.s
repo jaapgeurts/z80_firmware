@@ -172,18 +172,30 @@ printd:
   cp   TAB
   jr   nz,.checkCR
   ; move cursor
-  push bc
-  ld   bc,8
-  ex   de,hl  ; DE = string, HL = cursor
-  add  hl,bc  ; add 8
-  ex   de,hl  ; DE = cursor, HL = string
-  ld   a,e
-  and  0xfc ; modulo 8
-  ld   e,a
+  push hl ; store the str pointer
+
+  ld   h,d; ld hl,de
+  ld   l,e ; hl contains the v_cursor
+  ld   a,h ; convert screen_buf ptr into cursor
+  and  SCREEN_PTR_MASK_H
+  ld   h,a
+
+  ld   de,8
+  add  hl,de  ; add 8
+  ld   a,l
+  and  0xf8 ; modulo 8
+  ld   l,a
+  ex   de,hl  ;push result back into de (screen_buf ptr)
+; TODO: FIXME
   call checkScrollCursor
+
+  ; restore screenptr
+  ld   a,d
+  or   SCREEN_BASE_MASK_H
+  ld   d,a
+
   ; TODO: fill spaces
-  ld   (v_cursor),de
-  pop  bc
+  pop  hl ; restore string ptr
   jr   .endif
 .checkCR:
   ; check for CR and LF

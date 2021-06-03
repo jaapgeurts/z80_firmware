@@ -397,12 +397,12 @@ menu_files:
 
 .next:
   call printk
-;   ld   hl,files_spacer_msg
-;   call printk
-;   ld   a,b
-;   call printhex
-;   ld   a,c
-;   call printhex
+  ld   hl,files_spacer_msg
+  call printk
+  ld   a,d
+  call printhex
+  ld   a,e
+  call printhex
   call println
 
   ld   hl,0x0000 ; continue to read the next file
@@ -1035,7 +1035,7 @@ loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"
 loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   db 20,"Error loading data",CR,LF
 nosuchfile_msg:   db 14,"No such file",CR,LF
-files_spacer_msg: db 3," : "
+files_spacer_msg: db 3,TAB,": "
 slowflash_msg:    db 14,"Drive access",CR,LF
 argerror_msg:     db 27,"Wrong or missing argument",CR,LF
 error_checksum:   db 10,"Checksum",CR,LF

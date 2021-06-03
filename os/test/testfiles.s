@@ -51,6 +51,10 @@ STATFILE  equ 0x0028
 .next:
   rst  PRINTK
   call println
+  ld   a,d
+  call printhex
+  ld   a,e
+  call printhex
 
   ld   hl,0x0000
   ld   a,1

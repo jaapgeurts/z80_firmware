@@ -5,10 +5,10 @@ LFLAGS=-mz80 --no-std-crt0 --nostdinc --nostdlib --code-loc 0x4000
 
 .PHONY: clean
 
-all: view rtc_setdate hello hangman
+all: view setdate hello hangman
 
-rtc_setdate: rtc_setdate.s
-	vasmz80_oldstyle -z80asm -Fbin -o rtc_setdate.bin rtc_setdate.s
+setdate: rtc_setdate.s
+	vasmz80_oldstyle -z80asm -Fbin -o setdate.com rtc_setdate.s
 
 view: view.s
 	vasmz80_oldstyle -z80asm -Fbin -o view.bin view.s

@@ -118,6 +118,6 @@ RTCStopReset:
 welcome_msg: ascii 34,"Set date & time: 'YYMMDD HHmmss': "
 done_msg:   db 8,CR,LF,"Done",CR,LF
 
-  org 0x8100
+  rorg 0x8100
 v_timestruct:  db 0,0,6,1,9,0,6,0,3,0,1,2,5
 
