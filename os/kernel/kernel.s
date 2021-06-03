@@ -211,6 +211,7 @@ main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
   
+  ld   hl,readline_buf
   call readLine        ; read an input line; result in hl
   call println
 
@@ -225,28 +226,39 @@ main_loop:
 
   ex   de,hl
   ld   hl, command_table
-.search_table
-  ld   b,0    upper byte of bc
+.search_table:
+  ld   b,0    ; upper byte of bc
   ld   c,(hl) ; strlength of command in table
-  ld   a,c
+  ld   a,c ; put in A for comparison
   cp   0      ; if the last byte is a 0, then we reached end of table
-  jr   nz,.search_compare
-  inc  sp
-  inc  sp
-  inc  sp
-  inc  sp ; restore the stack
-  ld   hl,error_msg
-  call printk
-  jr   main_loop
+  jr   z,.trydisk
 .search_compare:
   call stringCompare
   cp   1    ; is str equal; compare with true
   jr   z,.exec_command ; if true do execute command
-  inc  c    ; skip three bytes (function pointer + 0)
-  inc  c
-  inc  c
+  inc  c    ; skip. vector to menu
+  inc  c    
+  inc  c   ; one extra byte for the string size
   add  hl,bc
   jr   .search_table
+.trydisk:
+
+  pop  bc
+  pop  hl
+  push hl
+  push bc
+  ld   a,0 ; read whole file
+  ld   de,0x4000
+  call readFile
+  cp   0
+  jr   nz,.failed
+  inc  sp
+  inc  sp
+  inc  sp
+  inc  sp ; restore the stack
+  call 0x4000
+  jr   main_loop
+
 .exec_command:
   ; found command. load address to jump to
   push hl
@@ -261,10 +273,37 @@ main_loop:
   push iy ; push return address
   jp   (hl)  ; jump to function pointer; de is the start of the arg string; hl points to function
 
-menu_help:
-  ld   hl, help_msg
+.failed:
+  ; end of the table, cleanup, print error and return
+  inc  sp
+  inc  sp
+  inc  sp
+  inc  sp ; restore the stack
+  ld   hl,error_msg
   call printk
-  ret 
+  jr   main_loop
+
+menu_help:
+  ex   de,hl
+  ld   hl, command_table
+.search_table:
+  ld   b,0    ; upper byte of bc
+  ld   c,(hl) ; strlength of command in table
+  ld   a,c ; put in A for comparison
+  cp   0      ; if the last byte is a 0, then we reached end of table
+  jr   z,.end
+  call printk
+  ld   a,TAB
+  call putChar
+  inc  c    ; skip. vector to menu
+  inc  c    
+  inc  c   ; one extra byte for the string size
+  add  hl,bc
+  jr   .search_table
+.end:
+  call println
+  ret
+
 
 ; TODO: improve this
 menu_date:
@@ -375,25 +414,24 @@ menu_files:
   ret
 
 menu_fload:
+  call getAddress
+  ret  z   ; result in hl, str in de
+  push hl
+
+; TODO: specifcy
   ld   h,d
   ld   l,e ; ld hl,de
   call nextToken
   
   ld   a,0 ; read whole file
-  ld   de,0x4000
+  pop  de
   call readFile
   cp   0
-  jr   nz,.nosuchfile
-  jp   0x4000
-  
-
-.nosuchfile:
-  ld  hl,nosuchfile_msg
+  jr   z,.end
+  ld   hl,nosuchfile_msg
   call printk
-
+.end:
   ret
-
-
 
 ; serial load
 menu_sload:
@@ -536,6 +574,7 @@ setColor:
 ; parses an address string into hl
 ; input: HL : string
 ; returns address in HL
+; TODO: fix argument  error messages
 getAddress:
   ld   h,d
   ld   l,e ; ld hl,de
@@ -862,8 +901,8 @@ stringCompare: ; hl = src, de = dst
 
 readLine: ; result in input_buf & hl
   push bc
-  push de
-  ld   de, readline_buf+1
+  push hl ; keep original hl
+  inc  hl
   ld   b,0
 .read_line_again:
   call getKeyWait     ; get character
@@ -884,20 +923,19 @@ readLine: ; result in input_buf & hl
   ld   a,BS   ; put the cursor one back
   call putChar
   dec  b   ; one less char in the string
-  dec  de
+  dec  hl
   jr   .read_line_again
 .if_not_bs:
-  ld   (de), a    ; input_buf[b] = a
+  ld   (hl), a    ; input_buf[b] = a
   call putChar
-  inc  de  ; next char
+  inc  hl  ; next char
   inc  b  ; one more char in the string
   ; TODO: check for buffer overruns
   jr   .read_line_again
 .read_line_end:
   ld   a,b
-  ld   (readline_buf), a ; input_buf[0] = b
-  ld   hl,readline_buf
-  pop  de
+  pop  hl
+  ld   (hl), a ; input_buf[0] = b
   pop  bc
   ret  ; return to caller
 
@@ -991,7 +1029,6 @@ putChar:
 rom_msg:          db 22,"Z80 ROM Monitor v0.9",CR,LF
 author_msg:       db 30,"(C) January 2021 Jaap Geurts",CR,LF
 url_msg:          db 36,"github.com/jaapgeurts/z80_computer",CR,LF
-help_msg:         db 121,"Commands: help, sload <addr>, fload <addr>, dump <addr>, date, run <addr>, cls, basic, fgcolor <r g b>, bgcolor <r g b>",CR,LF
 prompt_msg:       db 2, "> "
 error_msg:        db 26,"Error - unknown command.",CR,LF
 loading_msg:      db 42,"Send data using Xmodem. Load program at 0x"

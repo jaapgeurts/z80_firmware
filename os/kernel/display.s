@@ -73,7 +73,22 @@ putDisplayChar:
   push bc
 
   ld   de,(v_cursor)
- 
+
+  cp   TAB
+  jr   nz,.checkBS
+  ; move cursor
+  ld   bc,8
+  ex   de,hl  ; HL = cursor
+  add  hl,bc  ; add 8
+  ex   de,hl  ; DE = cursor,
+  ld   a,e
+  and  0xf8 ; modulo 8
+  ld   e,a
+  call checkScrollCursor
+  ; TODO: fill spaces
+  ld   (v_cursor),de
+  jr   .end_nodraw
+ .checkBS:
   cp   BS
   jr   nz,.checkCR
   ; handle BS - remove previous char
@@ -141,7 +156,7 @@ printd:
   push bc
   push de
 
-  ld  de,(v_cursor) ; remember start pos
+  ld  de,(v_cursor) ; start pos in DE
 ;  ld  (v_tmp),de
 
   ; add cursor index to screenbuf start
@@ -153,6 +168,24 @@ printd:
 .printd_loop:
   inc  hl
   ld   a, (hl)
+  ; check for TAB
+  cp   TAB
+  jr   nz,.checkCR
+  ; move cursor
+  push bc
+  ld   bc,8
+  ex   de,hl  ; DE = string, HL = cursor
+  add  hl,bc  ; add 8
+  ex   de,hl  ; DE = cursor, HL = string
+  ld   a,e
+  and  0xfc ; modulo 8
+  ld   e,a
+  call checkScrollCursor
+  ; TODO: fill spaces
+  ld   (v_cursor),de
+  pop  bc
+  jr   .endif
+.checkCR:
   ; check for CR and LF
   cp   CR
   jr   nz, .checkLF
@@ -388,6 +421,8 @@ displayRepaint:
   push hl
   push bc
   push de
+  push ix
+  push iy
 
   ld   ix,(v_foreground)
   ld   iy,(v_background)
@@ -550,6 +585,8 @@ displayRepaint:
   jp  .startGlyph
 
 .printLetEnd:
+  pop  iy
+  pop  ix
   pop  de
   pop  bc
   pop  hl
