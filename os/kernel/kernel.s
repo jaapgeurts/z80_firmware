@@ -425,11 +425,18 @@ menu_fload:
   ret  z   ; result in hl, str in de
   push hl
 
-; TODO: specifcy
+  ld   a,h
+  call printhex
+  ld   a,l
+  call printhex
+  
+; TODO: specify
   ld   h,d
   ld   l,e ; ld hl,de
   call nextToken
-  
+
+;  call printk
+
   ld   a,0 ; read whole file
   pop  de
   call readFile
@@ -586,15 +593,10 @@ setColor:
   ret
 
 ; parses an address string into hl
-; input: HL : string
+; input: DE : string
 ; returns address in HL
 ; TODO: fix argument  error messages
 getAddress:
-  ld   h,d
-  ld   l,e ; ld hl,de
-  call nextToken
-  ld   d,h
-  ld   e,l ; ld de,hl
   ld   a,c
   cp   0 ; no argument given.
   jr   nz,.getadr_start
@@ -606,9 +608,6 @@ getAddress:
 .getadr_start:
   push bc
   push de
-
-  ld   d,h
-  ld   e,l; ld de,hl
 
   inc  de
   ; parse it
