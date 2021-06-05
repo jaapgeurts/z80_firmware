@@ -2,6 +2,13 @@
 ; lmaurits
 ; https://github.com/lmaurits/lm512
 
+; To use FAT formatted disks make sure to use the following parameters
+
+; 1. FAT volume must be in primary partition
+; 2. primary partition must be smaller than 65536 sectors
+; 3. sector size must be 512 bytes
+; 4. cluster/sectors must be 1
+
 
   global initFAT
   global statFile
@@ -168,9 +175,20 @@ ComputeSectors:
 ;;;;;;;;;;;;
 
 ClusterToSector:
-    ; first convert cluster in hl to sector
+; Load b,c,d,e with the sector corresponding to the cluster in hl
+	ld   bc, (start_of_data)
+	add  hl, bc			; add 1 sector per cluster
+	or   a			; Clear carry flag
+	ld   bc, 2
+	sbc  hl, bc			; Subtract 2 (clusters 0, 1 don't map to data region)
+	ld   b, h
+	ld   c, l
+	ld   de, 0
+	ret
 
-	or	a			; Clear carry flag
+ClusterToSectorGeneric:
+    ; first convert cluster in hl to sector
+    or	a			; Clear carry flag
 	ld	bc, 2
 	sbc	hl, bc			; Subtract 2 (clusters 0, 1 don't map to data region)
 
@@ -178,6 +196,7 @@ ClusterToSector:
     ld  a,(sectors_per_cluster)
     ex  de,hl
 
+    ; this can replaced by a shift since sectors/cluster is a power of 2
     call multiply16
     ; ahl now contains the sectors
 
@@ -687,19 +706,19 @@ readFile:
 	jr	z, .readFileContinue
 
 	; Find file
-	call	FindFile
-	ret	nz	; FindFileFailed
-	ld	hl, (starting_cluster)
-	call	SeekCluster
-	ld	a, 00
-	ld	(all_done), a
-	jr	.fileNotEmpty
+	call FindFile
+	ret  nz	; FindFileFailed
+	ld   hl, (starting_cluster)
+	call SeekCluster
+	ld   a, 00
+	ld   (all_done), a
+	jr   .fileNotEmpty
 
 .readFileContinue:
 	ld	a, (all_done)
 	cp	0xFF
 	jr	nz, .fileNotEmpty
-	ld	a, 0
+	ld	a, 0 ; when done return success and 0 bytes read
 	ld	bc, 0x0000
 	ld	de, (memory_pointer)
 	ret
@@ -714,38 +733,38 @@ readFile:
 	jr	z, .readWholeFileLoop
 
 .readFilePartial:
-	ld	b, a
+	ld   b, a
 .readFilePartialLoop:
-	push	bc
-	call	ReadSector
-	pop	bc
-	jr	z, .readFileAdjustBytes
-	djnz	.readFilePartialLoop
-	jr	.readFileReturn
+	push bc
+	call ReadSector
+	pop  bc
+	jr   z,.readFileAdjustBytes
+	djnz .readFilePartialLoop
+	jr   .readFileReturn
 
 .readWholeFileLoop:
-	call	ReadSector
-	jr	nz, .readWholeFileLoop
+	call ReadSector
+	jr   nz, .readWholeFileLoop
 .readFileAdjustBytes:
-	ld	a, 0xFF
-	ld	(all_done), a
-	ld	de, (size_in_bytes)
-	ld	a, d
-	and	1
-	ld	d, a
-	ld	hl, (bytes_read)
-	ld	bc, 512
-	or	a ; Clear carry flag before sbc
-	sbc	hl, bc
-	add	hl, de
-	ld	(bytes_read), hl
+	ld   a, 0xFF
+	ld   (all_done), a
+	ld   de, (size_in_bytes)
+	ld   a, d
+	and  1
+	ld   d, a
+	ld   hl, (bytes_read)
+	ld   bc, 512
+	or   a ; Clear carry flag before sbc
+	sbc  hl, bc
+	add  hl, de
+	ld   (bytes_read), hl
 
 .readFileReturn:
-	ld	a, 0
-	cp		a	; Set zero flag
-	ex	de, hl
-	ld	hl, 0x000
-	ld	bc, (bytes_read)
+	ld   a, 0
+	cp   a	; Set zero flag
+	ex   de, hl
+	ld   hl, 0x000
+	ld   bc, (bytes_read)
 	ret
 
 ReadSector:

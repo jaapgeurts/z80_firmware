@@ -59,7 +59,7 @@ start:
   section .rst_table
 JT_1:
   jp   getKey        ; 0x08
-  jp   stringCompare ; 0x1b
+  jp   stringCompare ; 0x0b
   align 3     
   jp   putChar       ; 0x10
   align 3
@@ -78,8 +78,9 @@ JT_1:
   reti
 
 JT_2:
-  jp   initCompactFlash
-  jp   initFAT
+  jp   initCompactFlash  ; 0x3b
+  jp   initFAT           ; 0x3e
+  jp   nextToken         ; 0x41
 
   
   ; NMI ISR
@@ -244,18 +245,19 @@ main_loop:
 .trydisk:
 
   pop  bc
-  pop  hl
-  push hl
+  pop  hl ; restore string for read
   push bc
+  push hl
   ld   a,0 ; read whole file
   ld   de,0x4000
   call readFile
   cp   0
   jr   nz,.failed
-  inc  sp
-  inc  sp
-  inc  sp
-  inc  sp ; restore the stack
+  pop  hl
+  pop  bc
+  call nextToken
+  ld   d,h
+  ld   e,l
   call 0x4000
   jr   main_loop
 
@@ -265,11 +267,16 @@ main_loop:
   pop  ix  ; ld  ix,hl  = start of command table
   inc  c
   add  ix,bc  ; add count to it
-  ld   h,(ix+1) ; load func pointer
-  ld   l,(ix)
   ld   iy,main_loop ; push return address
   pop  bc ; restore token counters
   pop  de ; the str
+  ld   h,d
+  ld   l,e
+  call nextToken
+  ld   d,h
+  ld   e,l
+  ld   h,(ix+1) ; load func pointer
+  ld   l,(ix)
   push iy ; push return address
   jp   (hl)  ; jump to function pointer; de is the start of the arg string; hl points to function
 
@@ -522,6 +529,13 @@ menu_dump:
 menu_run:
   call getAddress
   ret  z   ; result in hl, str in de
+  push hl
+  ld   h,d
+  ld   l,e
+  call nextToken
+  ld   d,h
+  ld   e,l
+  pop  hl
   jp   (hl); jump to loaded code which will return
 
 menu_cls:
@@ -592,8 +606,10 @@ getAddress:
 .getadr_start:
   push bc
   push de
-  push hl
-  pop  de
+
+  ld   d,h
+  ld   e,l; ld de,hl
+
   inc  de
   ; parse it
   ld   a,(de)

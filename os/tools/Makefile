@@ -11,7 +11,7 @@ setdate: rtc_setdate.s
 	vasmz80_oldstyle -z80asm -Fbin -o setdate.com rtc_setdate.s
 
 view: view.s
-	vasmz80_oldstyle -z80asm -Fbin -o view.bin view.s
+	vasmz80_oldstyle -z80asm -Fbin -o view.com view.s
 
 hello: out/hello.rel out/sea80.rel
 	$(LINK) $(LFLAGS) -o $@.ihx $^

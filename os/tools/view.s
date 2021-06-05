@@ -20,10 +20,14 @@ PSG_PORTB   equ 15
 CR equ 0x0D
 LF equ 0x0A
 
-GETC     equ 0x0008 ; RST 1 getKey
-PUTC     equ 0x0010 ; RST 2 putChar
-PRINTK   equ 0x0018 ; RST 3 printk
-READLINE equ 0x0020 ; RST 4 readline
+GETC      equ 0x0008 ; RST 1 getKey
+PUTC      equ 0x0010 ; RST 2 putChar
+PRINTK    equ 0x0018 ; RST 3 printk
+READLINE  equ 0x0020 ; RST 4 readline
+READFILE  equ 0x002b ; readfile
+INITCF    equ 0x003b ; initCompactflash
+INITFAT   equ 0x003e ; initFat
+NEXTTOKEN equ 0x0041 ; nextToken
 
 ILI_WAKEUP         equ 0x11
 ILI_DPY_NORMAL     equ 0x13
@@ -54,40 +58,54 @@ MAX_IMAGES equ 7 ; current absolute max is 109 photos
 
 v_millis equ 0xf571
 
-  org 0x5000
+BUFFER equ 0x5000
+
+  org 0x4000
 
   push hl
   push bc
   push de
+
+  ld   h,d
+  ld   l,e
+
+;  call NEXTTOKEN
+  ld   a,c
+  cp   0
+  jr   nz,.printarg
+  ld   hl,usage_msg
+  rst  PRINTK
+  jr   .end
+
+.printarg:
+  push hl
+;  rst PRINTK
 
     ; set port to A to input and port B to output
   ld   a,PSG_ENABLE
   ld   b,0b10111111
   call psgWrite
 
-  ld   a,ILI_REG_MADCTL     ; set address mode
-  out  (TFT_C),a
-  ;ld   a,0b00100000
-  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MV
-  out   (TFT_D),a
-
-  ; reset scrolling
-  ld   a,ILI_DPY_VSSA
-  out  (TFT_C),a
-  ld   a, 0
-  out  (TFT_D),a
-  out  (TFT_D),a
-
-  call initCompactFlash
-
-  call viewImage
+  call INITCF
+  call INITFAT
 
   ; set the last time to the current time
-  ld   bc,(v_millis)
-  ld   (v_last),bc
+;  ld   bc,(v_millis)
+;  ld   (v_last),bc
+
 
 .loop:
 
+  pop  hl
+  call viewImage
+  cp   0
+  jr   nz,.checkagain
+
+  ld    hl,load_error
+  rst   PRINTK
+  jr    .end
+
+.checkagain:
   ; read button
   ld   a,PSG_PORTA
   call psgRead
@@ -97,46 +115,25 @@ v_millis equ 0xf571
   ; has the boolean been flipped because interval elapsed?
   ; if (current - last < interval)
   ; loop
-  ld   hl,(v_millis)
-  ld   (v_current),hl
-  ld   de,(v_last)
-  or   a ; clear carry
-  sbc  hl,de
-  ld   de,DELAY
-  or   a
-  sbc  hl,de
-  jp   m,.loop
+;   ld   hl,(v_millis)
+;   ld   (v_current),hl
+;   ld   de,(v_last)
+;   or   a ; clear carry
+;   sbc  hl,de
+;   ld   de,DELAY
+;   or   a
+;   sbc  hl,de
+;   jp   m,.checkagain
 
-  ; show next image
-  ld   de,(v_current)
-  ld   (v_last),de
-  ld   a,(imgindex)
-  inc  a
-  cp   MAX_IMAGES
-  jr   nz,.dontinc
-  ld   a,0
-.dontinc:
-  ld   (imgindex),a
+;   ; set last time to current
+;   ld   de,(v_current)
+;   ld   (v_last),de
 
-  ; yes, show next img
-  ld   b,a ; store current num in b
-  ld   de,600
-  call multiply16
-  ld   (startsector),hl
-
-  call viewImage
-
-  jr   .loop
+  jr   .checkagain 
 
 .end:
 
-  ; reset display orientation
 
-  ld   a,ILI_REG_MADCTL     ; set address mode
-  out  (TFT_C),a
-  ;ld   a,0b00100000
-  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MY
-  out   (TFT_D),a
 
   pop  de
   pop  bc
@@ -147,11 +144,38 @@ v_millis equ 0xf571
 viewImage:
   push hl
   push bc
-  push de
 
+
+  ; load file
+  ld   a,1 ; read one sector
+  ld   de,BUFFER
+  call READFILE
+
+  jr   z,.checkbytes
+  jr   .stop
+.checkbytes
+  ld   a,b
+  or   c
+  jr   nz,.start
+.stop:
+  ld   a,0
+  jr   .end
+
+.start:
   ; setup display 
+  ld   a,ILI_REG_MADCTL     ; set address mode
+  out  (TFT_C),a
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MV
+  out  (TFT_D),a
 
-   
+  ; reset scrolling
+  ld   a,ILI_DPY_VSSA
+  out  (TFT_C),a
+  ld   a, 0
+  out  (TFT_D),a
+  out  (TFT_D),a  
+
   ; set display start and end position
   ld   hl,0
   ld   de,DPYWIDTH-1
@@ -163,137 +187,48 @@ viewImage:
   ld   a,ILI_MEM_WRITE    ; do write
   out  (TFT_C),a
 
-  ; prepare compact flash read
-; DEBUG SERIAL
-;   ld   a,'D'
-;   rst  PUTC
-
-  ld   hl,0 ; start at 0
-  ld   de,(startsector) ; start at 0
-  ld   b,200 ; = sector count, 512 bytes
-  call cfSetBlock
-  call cfIssueCommand
-
-; DEBUG SERIAL
-;   ld   a,'C'
-;   rst  PUTC
-
-; loop 480x320 times = 3 * 200 * 256 * 2
-  ld   d,3
-  ld   bc,200 ; b = 0 , c = 200
-.viewloop:
-
-  call cfReadByte
+  ; BC contains bytes read.
+  ; write as many bytes to the screen as are in the file
+.readloop:
+  ld   hl,BUFFER
+.writeloop:
+  ld   a,(hl)
+  inc  hl
   out  (TFT_D),a ; send to display
-  call cfReadByte
-  out  (TFT_D),a ; send to display
+  dec  bc
+  ld   a,b
+  or   c   ; 16 bit loop
+  jr   nz,.writeloop
 
-  djnz .viewloop
+  ; load next cluster
+  ld   hl,0 ; continue current file
+  ld   a,1 ; read one sector
+  ld   de,BUFFER
+  call READFILE
+  jr   z,.checkbytes2
+  jr   .stop2
+.checkbytes2
+  ld   a,b
+  or   c
+  jr   nz,.readloop
+.stop2:
+  ld   a,0
 
-  ld   b,0  ; dnjz decreases first then compares so is actually 256
-  dec  c
-  jr   nz,.viewloop
+  ; reset display orientation
 
+  ld   a,ILI_REG_MADCTL     ; set address mode
+  out  (TFT_C),a
+  ;ld   a,0b00100000
+  ld   a,ILI_MASK_MADCTL_ML | ILI_MASK_MADCTL_MY
+  out   (TFT_D),a
 
-  ; calculate the next block(200sectors) from startsector
-  push bc
-  push de
-  ld   a,4
-  sub  d
-  ld   e,a
-  ld   h,200
-  call multiply8
-  ld   bc,(startsector)
-  add  hl,bc
-  ex   de,hl
-  ld   hl,0 ; start at 0
-  ld   b,200 ; = sector count, 512 bytes
-  call cfSetBlock
-  call cfIssueCommand
-
-  pop  de
-  pop  bc
-
-  ld   c,200
-  dec  d
-  jr   nz,.viewloop
+  ld   a,1
 
 .end:
-  pop  de
   pop  bc
   pop  hl
   ret
 
-; multiplies h by e and places the result in hl 
-multiply8:
-  push de
-  push bc
-  ld   d, 0	; Combining the overhead and
-  sla  h	; optimised first iteration
-  sbc  a, a
-  and  e
-  ld   l, a
-   
-  ld   b, 7
-.loop:
-  add  hl, hl          
-  jr   nc, $+3
-  add  hl, de
-  djnz .loop
-  pop  bc
-  pop  de
-  ret
-
-; multiplies de by a and places the result in ahl
-multiply16:
-  push bc
-  ld   c, 0
-  ld   h, c
-  ld   l, h
-
-  add  a, a      ; optimised 1st iteration
-  jr   nc, $+4
-  ld   h,d
-  ld   l,e
-
-  ld   b, 7
-.loop:
-  add  hl, hl
-  rla
-  jr   nc, $+4
-  add  hl, de
-  adc  a, c            ; yes this is actually adc a, 0 but since c is free we set it to zero and so we can save 1 byte and up to 3 T-states per iteration
-   
-  djnz .loop
-  pop  bc
-  ret
-
-  
-printhex:
-  push af
-  srl a
-  srl a
-  srl a
-  srl a
-  call printhex_nibble
-  pop af
-  call printhex_nibble
-  ret
-
-printhex_nibble: ; converts a nibble to hex char
-  push bc
-  push hl
-  ld   hl,hexconv_table
-  and  0x0F ; take bottom nibble only
-  ld   b,0
-  ld   c,a
-  adc  hl,bc
-  ld   a,(hl)
-printhex_end:
-  rst PUTC
-  pop hl
-  pop bc
-  ret
 
 ; hl = x1,de = x2
 displaySetX1X2:
@@ -324,40 +259,6 @@ displaySetY1Y2:
   out  (TFT_D),a
   ret
 
-displayClear:
-  push bc
-  ld   hl,0
-  ld   de,0x01e0
-  call displaySetX1X2
-  ld   hl,0
-  ld   de,0x0140
-  call displaySetY1Y2
-  ld   a,ILI_MEM_WRITE    ; do write
-  out  (TFT_C),a
-; loop 480x320 times = 3 * 200 * 256
-  ld   d,3
-  ld   bc,200
-.dpyClearLoop:
-  ld   a,0xf8  ; background blue TODO: move to var
-  out  (TFT_D),a
-  ld   a,0x00
-  out  (TFT_D),a
-  djnz .dpyClearLoop
-  dec  c
-  ld   b,0  ; dnjz decreases first then compares so is actually 256
-  jr   nz,.dpyClearLoop
-  dec  d
-  ld   c,200
-  jr   nz,.dpyClearLoop
-
-  pop  bc
-  ret
-
-
-
-
-
-
 psgWrite:
   out  (PSG_REG),a
   ld   a,b
@@ -370,13 +271,11 @@ psgRead:
   ret
 
 
-
-imgindex:      db 0
-startsector:   dw 0
+imgindex:      db 1
 v_last:        dw 0
 v_current:     dw 0
 welcome_msg:   db 12,"View image",CR,LF
-oneortwo_msg:  db 14,"Image number? "
+load_error:    db 21,"Error loading image",CR,LF
 done_msg:      db 6,"Done",CR,LF
-hexconv_table: db "0123456789ABCDEF"
+usage_msg:     db 21,"view.com <filename>",CR,LF
 
