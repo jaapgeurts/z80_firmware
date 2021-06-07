@@ -157,4 +157,4 @@ initCompactFlash:
   section .rodata
 
   init_msg:    db 12,"Init CF Card"
-  done_msg:    db 6,"Done",CR,LF
+  done_msg:    db 8,". Done",CR,LF
