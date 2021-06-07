@@ -25,8 +25,6 @@ PUTC      equ 0x0010 ; RST 2 putChar
 PRINTK    equ 0x0018 ; RST 3 printk
 READLINE  equ 0x0020 ; RST 4 readline
 READFILE  equ 0x002b ; readfile
-INITCF    equ 0x003b ; initCompactflash
-INITFAT   equ 0x003e ; initFat
 NEXTTOKEN equ 0x0041 ; nextToken
 
 ILI_WAKEUP         equ 0x11
@@ -69,7 +67,8 @@ BUFFER equ 0x5000
   ld   h,d
   ld   l,e
 
-;  call NEXTTOKEN
+  call NEXTTOKEN
+
   ld   a,c
   cp   0
   jr   nz,.printarg
@@ -79,15 +78,11 @@ BUFFER equ 0x5000
 
 .printarg:
   push hl
-;  rst PRINTK
 
     ; set port to A to input and port B to output
   ld   a,PSG_ENABLE
   ld   b,0b10111111
   call psgWrite
-
-  call INITCF
-  call INITFAT
 
   ; set the last time to the current time
 ;  ld   bc,(v_millis)
@@ -193,8 +188,8 @@ viewImage:
   ld   hl,BUFFER
 .writeloop:
   ld   a,(hl)
-  inc  hl
   out  (TFT_D),a ; send to display
+  inc  hl
   dec  bc
   ld   a,b
   or   c   ; 16 bit loop

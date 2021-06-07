@@ -33,6 +33,7 @@ READLINE_BUF_SIZE equ 0x40 ; 64 chars
   global putKey
   global getKey
   global putChar
+  global printk
   global stringCompare
 
 ; variables
@@ -79,8 +80,8 @@ JT_1:
   reti
 
 JT_2:
-  jp   initCompactFlash  ; 0x3b
-  jp   initFAT           ; 0x3e
+  dsb  3  ; 0x3b
+  dsb  3  ; 0x3e
   jp   nextToken         ; 0x41
 
   
@@ -169,12 +170,12 @@ rom_entry:
   ld   b,4<<1
   call setLed
 
-
   call initSerialKeyboard
 
   ; set leds to 5
   ld   b,5<<1
   call setLed
+
 
 ; setup interrupts
   ld   a,0x01
@@ -204,6 +205,13 @@ welcome:
   call printd
   ld   hl,url_msg
   call printd
+
+ ; set leds to 7
+  ld   b,7<<1
+  call setLed
+
+  call initCompactFlash
+  call initFAT
 
   ld   b,0
   call setLed
@@ -385,11 +393,6 @@ menu_date:
   ret
 
 menu_files:
-  ld   hl,slowflash_msg
-  call printk
-
-  call initCompactFlash
-  call initFAT
 
   ld   hl,0x0000 ; start at the beginning
 
@@ -625,7 +628,6 @@ getAddress:
   call parseHexStr
   ld   e,a
 
-  call println  
   pop  hl
   pop  bc
   or   1; reset zero flag
@@ -1053,7 +1055,6 @@ loading_done_msg: db 16,CR,LF,"Loading done",CR,LF
 error_load_msg:   db 20,"Error loading data",CR,LF
 nosuchfile_msg:   db 14,"No such file",CR,LF
 files_spacer_msg: db 3,TAB,": "
-slowflash_msg:    db 14,"Drive access",CR,LF
 argerror_msg:     db 27,"Wrong or missing argument",CR,LF
 error_checksum:   db 10,"Checksum",CR,LF
 hexconv_table:    db "0123456789ABCDEF"

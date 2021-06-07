@@ -3,6 +3,8 @@
   global cfRead
   global cfWrite
 
+ include "consts.inc"
+
   section .consts
 CF_DATA    equ 0xC0
 CF_ERRFT   equ 0xC1
@@ -113,10 +115,32 @@ cfWaitDataReady:
 
 initCompactFlash:
 
+  ld   hl, init_msg
+  call printk
+
   ld   a,0x04 ; reset
   out  (CF_STATCMD),a ;  
 
-  call cfWaitBusy
+  ld   b,3
+  ld   de,0xFFFF
+
+.localwait:
+  ld   a,d
+  or   e
+  jr   nz,.dowait
+  dec  b
+  ld   a,b
+  cp   0
+  jr   nz,.dowait
+  ld   b,3
+  ld   a,'.'
+  call putChar
+.dowait:
+  dec  de
+  in   a, (CF_STATCMD)			;Read status
+  and  0b10000000				;Mask busy bit
+  jr   nz,.localwait			;Loop until busy(7) is 0
+
   ld   a,0x01      ; set 8 bit
   out  (CF_ERRFT),a
   
@@ -124,8 +148,13 @@ initCompactFlash:
   ld   a,0xef
   out  (CF_STATCMD),a ; enable the 8 bit feature
 
-; DEBUG SERIAL
-;   ld   a,'I'
-;   rst  PUTC
+  ld   hl,done_msg
+  call printk
 
   ret
+
+
+  section .rodata
+
+  init_msg:    db 12,"Init CF Card"
+  done_msg:    db 6,"Done",CR,LF
