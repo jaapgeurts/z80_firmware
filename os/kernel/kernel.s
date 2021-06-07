@@ -45,6 +45,7 @@ READLINE_BUF_SIZE equ 0x40 ; 64 chars
     readline_buf: dsb READLINE_BUF_SIZE; ; 64 bytes for the readline buffer
     ; real time clock
     v_timestruct: dsb RTC_REG_COUNT ; time structure
+    num_tokens:   dsb  1 ; number of tokens when parsing arguments
   section .stack
     dsw STACK_SIZE
 
@@ -216,8 +217,10 @@ main_loop:
   call readLine        ; read an input line; result in hl
   call println
 
-; get the first argument (this is the command)
-  call firstToken
+; break string into tokens 
+; and get the first argument (this is the command)
+  call tokenize
+
   ld   a,c
   cp   0
   jr   z,main_loop ; nothing to do
@@ -225,7 +228,7 @@ main_loop:
   push hl ; save str ptr
   push bc ; save token counters
 
-  ex   de,hl
+  ex   de,hl ; now DE is cmdline
   ld   hl, command_table
 .search_table:
   ld   b,0    ; upper byte of bc
@@ -244,8 +247,8 @@ main_loop:
   jr   .search_table
 .trydisk:
 
-  pop  bc
-  pop  hl ; restore string for read
+  pop  bc ; restore counters for args
+  pop  hl ; restore string for read file
   push bc
   push hl
   ld   a,0 ; read whole file
@@ -253,28 +256,20 @@ main_loop:
   call readFile
   cp   0
   jr   nz,.failed
-  pop  hl
-  pop  bc
-  call nextToken
-  ld   d,h
-  ld   e,l
+  pop  de ; arguments to command
+  pop  bc ; argcount
   call 0x4000
   jr   main_loop
 
 .exec_command:
   ; found command. load address to jump to
-  push hl
-  pop  ix  ; ld  ix,hl  = start of command table
-  inc  c
-  add  ix,bc  ; add count to it
+  push hl ; current index into command table (at command)
+  pop  ix  ; ld  ix,hl  
+  inc  c  ; C contains the strlen of current commend.
+  add  ix,bc  ;  find the vector
   ld   iy,main_loop ; push return address
   pop  bc ; restore token counters
   pop  de ; the str
-  ld   h,d
-  ld   l,e
-  call nextToken
-  ld   d,h
-  ld   e,l
   ld   h,(ix+1) ; load func pointer
   ld   l,(ix)
   push iy ; push return address
@@ -421,24 +416,16 @@ menu_files:
   ret
 
 menu_fload:
-  call getAddress
-  ret  z   ; result in hl, str in de
-  push hl
-
-  ld   a,h
-  call printhex
-  ld   a,l
-  call printhex
-  
-; TODO: specify
   ld   h,d
   ld   l,e ; ld hl,de
   call nextToken
 
-;  call printk
+  call getAddress
+  ret  z   ; result in de
+
+  call nextToken
 
   ld   a,0 ; read whole file
-  pop  de
   call readFile
   cp   0
   jr   z,.end
@@ -449,19 +436,24 @@ menu_fload:
 
 ; serial load
 menu_sload:
-  call getAddress
-  ret  z   ; result in hl, str in de
-
+  ld   h,d
+  ld   l,e ; ld hl,de
+  call nextToken
   push hl
+
+  call getAddress
+  ret  z   ;  result in de
+  push hl
+
   ld   hl, loading_msg
   call printk
 
-  ld   h,d
-  ld   l,e ; ld hl,de
+  pop  hl ; addr str
   call printk
   call println
   
-  pop  hl
+  ld   h,d
+  ld   l,e ; ld hl,de
   call loadProgram  ; do actual work
   cp   1
   jr   nz, .ln1
@@ -485,8 +477,14 @@ menu_dump:
   push bc
   push hl
 
-  call getAddress
+  ld   h,d
+  ld   l,e ; ld hl,de
+  call nextToken
+
+  call getAddress ; result in de
   jr   z, .dump_end
+  ld   h,d
+  ld   l,e ; ld hl,de
 
   ; do work
   ld   c,DUMP_ROWCOUNT    ; 16 rows maximum
@@ -534,15 +532,13 @@ menu_dump:
   ret
 
 menu_run:
-  call getAddress
-  ret  z   ; result in hl, str in de
-  push hl
   ld   h,d
-  ld   l,e
+  ld   l,e ; ld hl,de
   call nextToken
-  ld   d,h
-  ld   e,l
-  pop  hl
+
+  call getAddress
+  ret  z   ; result in de
+  ex   de,hl ; now de contains str and hl contains address
   jp   (hl); jump to loaded code which will return
 
 menu_cls:
@@ -593,11 +589,11 @@ setColor:
   ret
 
 ; parses an address string into hl
-; input: DE : string
-; returns address in HL
+; input: HL : string
+; returns address in DE
 ; TODO: fix argument  error messages
 getAddress:
-  ld   a,c
+  ld   a,(hl)
   cp   0 ; no argument given.
   jr   nz,.getadr_start
   ld   hl,argerror_msg
@@ -607,26 +603,30 @@ getAddress:
 
 .getadr_start:
   push bc
-  push de
+  push hl
 
-  inc  de
+; MSB
+  inc  hl
   ; parse it
-  ld   a,(de)
+  ld   a,(hl)
   ld   b,a
-  inc  de
-  ld   a,(de)
+  inc  hl
+  ld   a,(hl)
   ld   c,a
   call parseHexStr
-  ld   h,a
-  inc  de
-  ld   a,(de)
+  ld   d,a
+; LSB
+  inc  hl
+  ld   a,(hl)
   ld   b,a
-  inc  de
-  ld   a,(de)
+  inc  hl
+  ld   a,(hl)
   ld   c,a
   call parseHexStr
-  ld   l,a
-  pop  de
+  ld   e,a
+
+  call println  
+  pop  hl
   pop  bc
   or   1; reset zero flag
   ret
@@ -756,7 +756,6 @@ parseHexStr:
   ld   a,b
   call char_to_nibble
   ld   b,a  ; put result back in b
-  inc  hl
   ld   a,c
   call char_to_nibble
   ld   c,a  ; put result back in c
@@ -813,83 +812,86 @@ printhex_end:
   pop bc
   ret
 
-; returns first token in hl. Tokens separated by spaces only
+; Prepare a string for extracting tokens
 ; destructive to string
 ; pre:
 ;   HL pointer to string
 ; post:
 ;   HL pointer to first token
-;   B chars remaining in original string after the token
-;   C chars in the current token 
-firstToken:
-  ld   b,(hl)
-  ld   c,0
-getToken: ; do not call directly
-  call skipSpace
-  ; store hl (start of string)
+;   C number of tokens
+tokenize:
   push hl
-  call findSpace
+  push de
+  push bc
+  ld   b,(hl) ; total str len
+  ld   d,h
+  ld   e,l ; ld de,hl ; DE = write pointer, HL = read pointer
+  ld   a,0
+  ld   (num_tokens),a
+  ld   c,0 ; current str len
+  push de
+  pop  ix ; ld ix,de ; ix is start of current string
+
+  inc  hl
+  inc  de
+
+.tokenloop:
+  ld   a,b ; check if there is any left over
+  cp   0
+  jr   z,.end ;  while(i>0) {
+  ld   a,(hl)
+  cp   ' '
+  jr   nz,.notspace ; if (*rd == ' ')
+  ld   a,c
+  cp   0
+  jr   z,.next ;if (cnt>0)
+  ld   (ix),c
+  ld   c,0
+  push de
+  pop  ix
+  inc  de
+  jr   .next
+.notspace: ; else
+  ld   a,c
+  cp   0   ;if (cnt==0)
+  jr   nz,.nextchar
+  ld   a,(num_tokens)
+  inc  a
+  ld   (num_tokens),a
+.nextchar:
+  inc  c
+  ld   a,(hl)
+  ld   (de),a
+  inc  de
+.next:
+  inc  hl
+  dec  b
+  jr   .tokenloop
+.end:
+  ld   a,c
+  cp   0
+  jr   z,.done:
+  ld   (ix),c
+.done:
+  pop  bc
+  ld   a,(num_tokens)
+  ld   c,a
+  pop  de
   pop  hl
-  ld   a,c  ; amount
-  ld   (hl),a
   ret
 
 ; returns the next token in a string
 ; IN: last token in HL
 ; OUT: next token in HL
-; don't touch BC
 nextToken:
-  push de
-  ld   c,0
-  ld   d,0
-  ld   e,(hl)
-  add  hl,de
-  inc  hl
-  pop  de
-  call getToken
-  ret
-
-; post:
-;   B returns amount of spaces skipped
-skipSpace:
-  ld   a,b
-  cp   0  ; string is empty
-  ret  z
-.nextSpace
-  ; move forward until we discover a letter
-  ld   a,b
-  cp   0  ; while we're not at the end of the string
-  jr   z,.done
-  inc  hl
-  dec  b
+  push bc
   ld   a,(hl)
-  cp   ' ' ; if a space
-  jr   z, .nextSpace ; found space
-.done:
-  inc  b
-  dec  hl ; set pointer to start of string
+  inc  a ; skip length element
+  ld   b,0
+  ld   c,a
+  add  hl,bc
+  pop  bc
   ret
-
-; C returns amount of letters skipped
-findSpace:
-  ld   a,b
-  cp   0    ; while we're not at the end of the string
-  ret  z ; nothing in the string
-.next_letter:
-  ; move forward until we discover a space
-  ld   a,b
-  cp   0  ; while we're not at the end of the string
-  jr   z,.done
-  inc  hl
-  inc  c
-  dec  b
-  ld   a,(hl)
-  cp   ' ' ; if not a space
-  jr   nz, .next_letter ; found space
-  dec  c
-.done:
-  ret
-
 
 stringCompare: ; hl = src, de = dst
   push bc
