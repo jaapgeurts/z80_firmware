@@ -1,17 +1,33 @@
 #include "sea80.h"
 
-uint8_t y;
+uint8_t a,b,c;
+
+char buf[256];
 
 void main() {
-    uint8_t x;
-    
-    y = 5;
-    x = 37;
 
-    putc(x);
- 
+    print("Tafels oefenen\r\n");
+    print("Reken uit:\r\n");
 
-    print("hello world\r\n");
-
+    for(;;) {
+        a = rand();
+        a = a % 9 + 1;
+        b = rand();
+        b = b % 9 + 1;
+        do {
+            itoa(a,buf);
+            print(buf);
+            print(" x ");
+            itoa(b,buf);
+            print(buf);
+            print(" = ");
+            readline(buf,255);
+            c = atoi(buf);
+            if (c != a*b)
+                print(" Jammer. Probeer nog eens.\r\n");
+        }
+        while (c != a * b);
+        print(" Heel goed!\r\n");
+    }
 
 }

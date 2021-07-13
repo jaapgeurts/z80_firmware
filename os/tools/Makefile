@@ -1,7 +1,9 @@
 CC=sdcc
 LINK=sdcc
-CFLAGS=-mz80 --no-std-crt0 --nostdinc --nostdlib -c
-LFLAGS=-mz80 --no-std-crt0 --nostdinc --nostdlib --code-loc 0x4000 
+CFLAGS=-mz80 --no-std-crt0 -c
+# --nostdinc --nostdlib
+LFLAGS=-mz80 --no-std-crt0  --code-loc 0x4000 
+# --nostdinc --nostdlib
 
 .PHONY: clean
 

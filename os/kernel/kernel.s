@@ -535,6 +535,7 @@ menu_dump:
   ret
 
 menu_run:
+; TODO: make ctrl-c work
   ld   h,d
   ld   l,e ; ld hl,de
   call nextToken
