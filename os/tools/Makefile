@@ -5,7 +5,7 @@ LFLAGS=-mz80 --no-std-crt0 --nostdinc --nostdlib --code-loc 0x4000
 
 .PHONY: clean
 
-all: view setdate hello hangman
+all: view setdate hello hangman tables
 
 setdate: rtc_setdate.s
 	vasmz80_oldstyle -z80asm -Fbin -o setdate.com rtc_setdate.s
@@ -14,6 +14,10 @@ view: view.s
 	vasmz80_oldstyle -z80asm -Fbin -o view.com view.s
 
 hello: out/hello.rel out/sea80.rel
+	$(LINK) $(LFLAGS) -o $@.ihx $^
+	sdobjcopy -I ihex $@.ihx -O binary $@.com
+
+tables: out/tables.rel out/sea80.rel
 	$(LINK) $(LFLAGS) -o $@.ihx $^
 	sdobjcopy -I ihex $@.ihx -O binary $@.com
 
