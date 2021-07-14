@@ -10,6 +10,8 @@ Assembler code must preserve the value of IX, all other registers can be used fr
 
 */
 
+#define BACKSPACE 8
+
 void print(char* s) {
     while(*s != 0)
       putc(*s++);
@@ -20,12 +22,26 @@ void println() {
     putc(10);
 }
 
+int strcmp(const char *s1, const char *s2) {
+   while (*s1 != '\0' && *s2 != '\0'  && *s1 == *s2) {
+      s1++;
+      s2++;
+   }
+   return *s1 - *s2;
+}
+
 void readline(char* str, uint8_t maxlen) {
   uint8_t i=0;
   char c = getc();
   while(c != '\r' && i < maxlen) {
     putc(c);
-    str[i++] = c;
+    if (c == BACKSPACE) {
+        putc(' ');
+        putc(c);
+        i--;
+    } else {
+        str[i++] = c;
+    }
     c = getc();
   }
   str[i] = 0;

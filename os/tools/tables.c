@@ -6,7 +6,7 @@ char buf[256];
 
 void main() {
 
-    print("Tafels oefenen\r\n");
+    print("Tafels oefenen. (Typ 'stop' om te stoppen)\r\n");
     print("Reken uit:\r\n");
 
     srand(); // seed random with the r register
@@ -24,6 +24,10 @@ void main() {
             print(buf);
             print(" = ");
             readline(buf,255);
+            if (strcmp(buf,"stop") == 0) {
+                print(" Tot ziens\r\n");
+                return;
+            }
             c = atoi(buf);
             if (c != a*b)
                 print(" Jammer. Probeer nog eens.\r\n");
