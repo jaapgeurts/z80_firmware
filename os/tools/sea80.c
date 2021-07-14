@@ -116,9 +116,39 @@ void putc(char c) {
 /*
  Returns a random number 0 <= r <= 255
  */
+static unsigned int seed1;
+static unsigned int seed2;
 uint8_t rand() {
+    /*
+    ;Inputs:
+;   (seed1) contains a 16-bit seed value
+;   (seed2) contains a NON-ZERO 16-bit seed value
+;Outputs:
+;   HL is the result
+;   BC is the result of the LCG, so not that great of quality
+;   DE is preserved
+;Destroys:
+;   AF
+;cycle: 4,294,901,760 (almost 4.3 billion)
+;160cc
+;26 bytes*/
     __asm
-    ld  a,r
-    ld  l,a
+    ld hl,(seed1)
+    ld b,h
+    ld c,l
+    add hl,hl
+    add hl,hl
+    inc l
+    add hl,bc
+    ld (seed1),hl
+    ld hl,(seed2)
+    add hl,hl
+    sbc a,a
+    and %00101101
+    xor l
+    ld l,a
+    ld (seed2),hl
+    add hl,bc
+    ret
     __endasm;
 }
