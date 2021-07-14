@@ -118,6 +118,22 @@ void putc(char c) {
  */
 static unsigned int seed1;
 static unsigned int seed2;
+
+void srand() {
+    __asm 
+    ld  a,r
+    ld  b,a
+    ld  a,r
+    ld  c,a
+    ld  (_seed1),bc
+    ld  a,r
+    ld  b,a
+    ld  a,r
+    ld  c,a
+    ld  (_seed2),bc
+    __endasm;
+}
+
 uint8_t rand() {
     /*
     ;Inputs:
@@ -133,21 +149,21 @@ uint8_t rand() {
 ;160cc
 ;26 bytes*/
     __asm
-    ld hl,(seed1)
+    ld hl,(_seed1)
     ld b,h
     ld c,l
     add hl,hl
     add hl,hl
     inc l
     add hl,bc
-    ld (seed1),hl
-    ld hl,(seed2)
+    ld (_seed1),hl
+    ld hl,(_seed2)
     add hl,hl
     sbc a,a
-    and %00101101
+    and #0b00101101
     xor l
     ld l,a
-    ld (seed2),hl
+    ld (_seed2),hl
     add hl,bc
     ret
     __endasm;

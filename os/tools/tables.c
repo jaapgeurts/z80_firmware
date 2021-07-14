@@ -9,6 +9,8 @@ void main() {
     print("Tafels oefenen\r\n");
     print("Reken uit:\r\n");
 
+    srand(); // seed random with the r register
+
     for(;;) {
         a = rand();
         a = a % 9 + 1;
