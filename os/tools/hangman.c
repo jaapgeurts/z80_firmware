@@ -14,6 +14,7 @@ int main() {
   print("Enter word to guess: ");
   readline(answer,64);
   println();
+  clearscreen();
 
   // Set the mask array - mask[i] is true if the
   // character s[i] has been guessed.  The mask
@@ -60,7 +61,7 @@ int main() {
   }
 
   // Print victory message!
-  print("Victory! The word is \"");
+  print("\r\nVictory! The word is \"");
   print(answer);
   print("\".\r\n");
 

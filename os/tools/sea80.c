@@ -47,6 +47,8 @@ void readline(char* str, uint8_t maxlen) {
   str[i] = 0;
 }
 
+
+
 uint8_t strlen(char* str) {
     uint8_t i=0;
     while (*str++ != 0)
@@ -108,6 +110,13 @@ void itoa( int n, char* s )
   s[i] = '\0';
 
   reverse( s ) ;
+}
+void clearscreen()
+{
+
+  __asm
+  call 0x44;
+  __endasm;    
 }
 
 char getc() {

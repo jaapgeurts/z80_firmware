@@ -83,6 +83,7 @@ JT_2:
   dsb  3  ; 0x3b
   dsb  3  ; 0x3e
   jp   nextToken         ; 0x41
+  jp   displayClear      ; 0x44
 
   
   ; NMI ISR
