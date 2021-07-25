@@ -11,9 +11,9 @@ uint8_t mask[64];
 
 int main() {
   // Get word to guess
-  print("Enter word to guess: ");
+  print("Type het woord: ");
   readline(answer,64);
-  println();
+  printline();
   clearscreen();
 
   // Set the mask array - mask[i] is true if the
@@ -26,9 +26,11 @@ int main() {
 
   // Loop over each round of guessing
   unsigned char gameover = 0;
+  unsigned char attempts = 0;
   while (!gameover) {
+    attempts++;
     // Print word with *s for unguessed letters
-    print("The word is : ");
+    print("Het woord is : ");
     for (int j = 0; j < N; ++j) {
       if (mask[j] == 1) {
         putc(answer[j]);
@@ -36,7 +38,7 @@ int main() {
         print("*");
       }
     }
-    println();
+    printline();
 
     // Get player's next guess
     char guess;
@@ -60,8 +62,12 @@ int main() {
     }
   }
 
+  char buf[5];
   // Print victory message!
-  print("\r\nVictory! The word is \"");
+  print("\r\n\x02 Gewonnen in ");
+  itoa(attempts,buf);
+  print(buf);
+  print(" keer! Het woord is \"");
   print(answer);
   print("\".\r\n");
 

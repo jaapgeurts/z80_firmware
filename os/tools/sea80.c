@@ -12,12 +12,17 @@ Assembler code must preserve the value of IX, all other registers can be used fr
 
 #define BACKSPACE 8
 
-void print(char* s) {
+void print(const char* s) {
     while(*s != 0)
       putc(*s++);
 }
 
-void println() {
+void println(const char* s){ 
+    print(s);
+    printline();
+}
+
+void printline() {
     putc(13);
     putc(10);
 }
@@ -48,15 +53,14 @@ void readline(char* str, uint8_t maxlen) {
 }
 
 
-
-uint8_t strlen(char* str) {
+uint8_t strlen(const char* str) {
     uint8_t i=0;
     while (*str++ != 0)
       i++;
     return i;
 }
 
-int atoi(char* s) {
+int atoi(const char* s) {
     int acum = 0;
     int factor = 1;
     
@@ -159,7 +163,7 @@ void srand() {
     __endasm;
 }
 
-uint8_t rand() {
+uint16_t rand() {
     /*
     ;Inputs:
 ;   (seed1) contains a 16-bit seed value

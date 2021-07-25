@@ -33,7 +33,7 @@ void main() {
                 print(" Jammer. Probeer nog eens.\r\n");
         }
         while (c != a * b);
-        print(" Heel goed!\r\n");
+        print(" \x02 Heel goed!\r\n");
     }
 
 }
