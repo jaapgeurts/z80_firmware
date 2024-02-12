@@ -17,7 +17,7 @@ void print(const char* s) {
       putc(*s++);
 }
 
-void println(const char* s){ 
+void println(const char* s){
     print(s);
     printline();
 }
@@ -63,12 +63,12 @@ uint8_t strlen(const char* str) {
 int atoi(const char* s) {
     int acum = 0;
     int factor = 1;
-    
+
     if(*s == '-') {
         factor = -1;
         s++;
     }
-    
+
     while((*s >= '0')&&(*s <= '9')) {
       acum = acum * 10;
       acum = acum + (*s - 48);
@@ -115,15 +115,16 @@ void itoa( int n, char* s )
 
   reverse( s ) ;
 }
-void clearscreen()
-{
 
+void clearscreen() __sdcccall(0)
+{
   __asm
   call 0x44;
-  __endasm;    
+  __endasm;
 }
 
-char getc() {
+char getc() __sdcccall(0)
+{
     __asm
 getKeyWait:
     rst  0x08
@@ -132,11 +133,12 @@ getKeyWait:
     __endasm;
 }
 
-void putc(char c) {
+void putc(char c) __sdcccall(0)
+{
     __asm
     ld   iy,#2
     add  iy,sp ; skip the return value
-    
+
     ld   a,(iy)
     rst  0x10
     __endasm;
@@ -148,8 +150,9 @@ void putc(char c) {
 static unsigned int seed1;
 static unsigned int seed2;
 
-void srand() {
-    __asm 
+void srand() __sdcccall(0)
+{
+    __asm
     ld  a,r
     ld  b,a
     ld  a,r
@@ -163,7 +166,8 @@ void srand() {
     __endasm;
 }
 
-uint16_t rand() {
+uint16_t rand() __sdcccall(0)
+{
     /*
     ;Inputs:
 ;   (seed1) contains a 16-bit seed value
@@ -196,4 +200,43 @@ uint16_t rand() {
     add hl,bc
     ret
     __endasm;
+}
+
+void delay(uint16_t millis)
+{
+  UNUSED(millis);
+  // TODO: use CTC timer instead, if timerblock free
+  __asm
+    ex  de,hl
+  delay_outer: ; delay 1 ms
+    ld  bc, #0x133 // 307 runs because loop takes 24 tstates
+  delay_inner:
+    dec bc
+    ld a,b
+    or c
+    jp nz, delay_inner
+    dec de
+    ld a,d
+    or e
+    jr nz,delay_outer
+  __endasm;
+}
+
+void io_output(uint8_t data, uint8_t port)
+{
+  UNUSED(data);
+  UNUSED(port);
+  __asm
+  ld c,l
+  out (c),a
+  __endasm;
+}
+
+uint8_t io_input(uint8_t port)
+{
+  UNUSED(port);
+  __asm
+  ld c,l
+  in a,(c)
+  __endasm;
 }

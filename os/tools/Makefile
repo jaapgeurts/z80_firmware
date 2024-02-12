@@ -1,52 +1,58 @@
 CC=sdcc
 LINK=sdcc
-CFLAGS=-mz80 --no-std-crt0 -c 
+CFLAGS=-mz80 --no-std-crt0 -c
 # --nostdinc --nostdlib
 LFLAGS=-mz80 --no-std-crt0 --code-loc 0x4000
 # --nostdinc --nostdlib
 
-hello_RELS=hello.rel sea80.rel
-hello_OBJS=$(addprefix obj/,$(hello_RELS))
-
-hangman_RELS=hangman.rel sea80.rel
-hangman_OBJS=$(addprefix obj/,$(hangman_RELS))
-
-woorden_RELS=woorden.rel sea80.rel
-woorden_OBJS=$(addprefix obj/,$(woorden_RELS))
-
-tables_RELS=tables.rel sea80.rel
-tables_OBJS=$(addprefix obj/,$(tables_RELS))
+CPROGS = hello.com hangman.com tables.com woorden.com blink.com song.com
+APROGS = view.com setdate.com
 
 .PHONY: clean
 
-all: view setdate hello hangman tables woorden
+all: $(CPROGS) $(APROGS)
 
-setdate: rtc_setdate.s
-	vasmz80_oldstyle -z80asm -Fbin -o setdate.com rtc_setdate.s
+.SECONDEXPANSION:
 
-view: view.s
-	vasmz80_oldstyle -z80asm -Fbin -o view.com view.s
+$(APROGS): $$(patsubst %.com,%.s,$$@)
+	vasmz80_oldstyle -z80asm -Fbin -o $@ $^
 
-hello: $(hello_OBJS)
+$(CPROGS): $$(patsubst %.com,obj/%.rel,$$@) obj/sea80.rel
 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
-	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
-
-tables: $(tables_OBJS)
-	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
-	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
-
-hangman: $(hangman_OBJS)
-	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
-	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
-
-woorden: $(woorden_OBJS)
-	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
-	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+	sdobjcopy -I ihex obj/$@.ihx -O binary $@
 
 obj/%.rel: %.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
 	rm -f *.asm *.lk *.map *.mem *.rst *.lst *.rel *.noi *.ihx *.sym *.bin *.com obj/*
+
+#setdate: rtc_setdate.s
+#	vasmz80_oldstyle -z80asm -Fbin -o setdate.com rtc_setdate.s
+
+#view: view.s
+#	vasmz80_oldstyle -z80asm -Fbin -o view.com view.s
+#
+# hello: $(hello_OBJS)
+# 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
+# 	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+#
+# blink: $(blink_OBJS)
+# 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
+# 	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+#
+# tables: $(tables_OBJS)
+# 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
+# 	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+#
+# hangman: $(hangman_OBJS)
+# 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
+# 	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+#
+# woorden: $(woorden_OBJS)
+# 	$(LINK) $(LFLAGS) -o obj/$@.ihx $^
+# 	sdobjcopy -I ihex obj/$@.ihx -O binary $@.com
+
+
 
 # mkdosfs -F 16 -s 1 -n SEA80 /dev/sda1 -v

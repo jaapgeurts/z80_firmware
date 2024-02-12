@@ -3,7 +3,7 @@
    global initSerialKeyboard
    global ISR_SerialB_Keyboard
 
-; keyboard codes 
+; keyboard codes
 SC_L_SHIFT equ 0x12
 SC_R_SHIFT equ 0x59
 
@@ -16,7 +16,7 @@ SC_ERR     equ 0xfc
 KBD_MASK_RELEASE  equ 0x01 ; for F0 codes
 KBD_MASK_EXTENDED equ 0x02 ; for E0 codes
 KBD_MASK_SHIFT    equ 0x04 ; for shift down
-KBD_MASK_CTRL     equ 0x08 ; for ctrl down 
+KBD_MASK_CTRL     equ 0x08 ; for ctrl down
 KBD_MASK_ALT      equ 0x10 ; for alt down
 KBD_MASK_META     equ 0x20 ; for meta down
 KBD_MASK_CAPS     equ 0x40 ; for caps lock ON
@@ -49,7 +49,7 @@ ISR_SerialB_Keyboard:
   ; incoming scancode being released
   ld   a,c ; c contains v_kbdstate
   and  ~KBD_MASK_RELEASE ; set release to false
-  ld   (v_kbdstate),a 
+  ld   (v_kbdstate),a
   ld   c,a
   ;   read it and check what was being released
   in   a,(SIO_BD)
@@ -100,7 +100,7 @@ ISR_SerialB_Keyboard:
   call translateScancode
   ; put into ringbuffer
   call putKey
-  
+
 .isr_kbd_end:
   pop  hl
   pop  bc
@@ -175,14 +175,14 @@ initSerialKeyboard:
 ; **********
 
     ; enable interrupt on char (WR1)
-  ld   a, 0b00000001 ; 
+  ld   a, 0b00000001 ;
   out  (SIO_BC), a
   ld   a, 0b00011100 ; int on all Rx chars; status affects vector
   out  (SIO_BC), a
 
   ld   a,0b00000010 ; prepare WR2 (interrupt vector)
   out  (SIO_BC),a
-  ld   a,0x10 ; 
+  ld   a,0x10 ;
   out  (SIO_BC),a
 
   ret
@@ -217,7 +217,7 @@ trans_table_shifted:
   db 0x00, ' ', 'V', 'F', 'T', 'R', '%',0x00 ; 28
   db 0x00, 'N', 'B', 'H', 'G', 'Y', '^',0x00 ; 30
   db 0x00,0x00, 'M', 'J', 'U', '&', '*',0x00 ; 38
-  db 0x00, '<', 'M', 'I', 'O', ')', '(',0x00 ; 40
+  db 0x00, '<', 'K', 'I', 'O', ')', '(',0x00 ; 40
   db 0x00, '>', '?', 'L', ':', 'P', '_',0x00 ; 48
   db 0x00,0x00, '"',0x00, '{', '+',0x00,0x00 ; 50
   db 0x98,0x00,0x0D, '}',0x00, "|",0x00,0x00 ; 58

@@ -82,7 +82,7 @@ void main() {
         println(" \x02 Heel goed!");
         index = rand() % MAX_WORDS;
       } else {
-        println("Jammer. Probeer het nog eens");
+        println(" Jammer. Probeer het nog eens");
       }
       printline();
   }

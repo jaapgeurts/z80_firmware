@@ -62,7 +62,7 @@ start:
 JT_1:
   jp   getKey        ; 0x08
   jp   stringCompare ; 0x0b
-  align 3     
+  align 3
   jp   putChar       ; 0x10
   align 3
   jp   printk        ; 0x18
@@ -85,7 +85,7 @@ JT_2:
   jp   nextToken         ; 0x41
   jp   displayClear      ; 0x44
 
-  
+
   ; NMI ISR
   section .isr_nmi
   ei
@@ -102,8 +102,8 @@ ISR_Nothing:
 ; so it's easy redefinable by users
   section .isr_table
 Main_ISR_Table:
-CTC_ISR_Table:  
-  dw  ISR_Nothing  ; interrupt is disabled in CTC because timer0 is baudrate gen. 
+CTC_ISR_Table:
+  dw  ISR_Nothing  ; interrupt is disabled in CTC because timer0 is baudrate gen.
   dw  ISR_Timer1_IncCounter  ; see ctc_timer.s
   dw  ISR_Nothing ; free for user purposes
   dw  ISR_Nothing ; free for user purposes
@@ -131,18 +131,17 @@ SIO_ISR_Table:
 
 rom_entry:
 
-  ; init variables
-  ld   hl,keyb_buf
-  ld   (keyb_buf_wr),hl
-  ld   (keyb_buf_rd),hl
-
-
-  ; set all PSG ports to output
+; set all PSG ports to output
   call initPSG
 
 ; set leds to 1
   ld   b,1<<1
   call setLed
+
+; init variables
+  ld   hl,keyb_buf
+  ld   (keyb_buf_wr),hl
+  ld   (keyb_buf_rd),hl
 
 ; init ctc timer
   ; baudrates - Time constant @ 3.6864 MHz
@@ -221,12 +220,12 @@ welcome:
 main_loop:
   ld   hl, prompt_msg     ; print the prompt
   call printk
-  
+
   ld   hl,readline_buf
   call readLine        ; read an input line; result in hl
   call println
 
-; break string into tokens 
+; break string into tokens
 ; and get the first argument (this is the command)
   call tokenize
 
@@ -250,7 +249,7 @@ main_loop:
   cp   1    ; is str equal; compare with true
   jr   z,.exec_command ; if true do execute command
   inc  c    ; skip. vector to menu
-  inc  c    
+  inc  c
   inc  c   ; one extra byte for the string size
   add  hl,bc
   jr   .search_table
@@ -273,7 +272,7 @@ main_loop:
 .exec_command:
   ; found command. load address to jump to
   push hl ; current index into command table (at command)
-  pop  ix  ; ld  ix,hl  
+  pop  ix  ; ld  ix,hl
   inc  c  ; C contains the strlen of current commend.
   add  ix,bc  ;  find the vector
   ld   iy,main_loop ; push return address
@@ -307,7 +306,7 @@ menu_help:
   ld   a,TAB
   call putChar
   inc  c    ; skip. vector to menu
-  inc  c    
+  inc  c
   inc  c   ; one extra byte for the string size
   add  hl,bc
   jr   .search_table
@@ -455,20 +454,20 @@ menu_sload:
   pop  hl ; addr str
   call printk
   call println
-  
+
   ld   h,d
   ld   l,e ; ld hl,de
   call loadProgram  ; do actual work
   cp   1
   jr   nz, .ln1
   ld   hl,error_load_msg
-  call printk 
+  call printk
   ret
 .ln1:
   cp   2
   jr   nz, .ln2
   ld   hl,error_checksum
-  call printk 
+  call printk
   ret
 .ln2:
   ld   hl, loading_done_msg
@@ -516,7 +515,7 @@ menu_dump:
   djnz .dump_hex_val
   ld   a,' '
   call putChar
-  ld   b,DUMP_BYTESPERROW  
+  ld   b,DUMP_BYTESPERROW
   pop  hl
 .dump_ascii_val:
   ld   a,(hl)
@@ -648,17 +647,17 @@ loadProgram:
   ld   a,NAK ; send initial nak
   call putSerialChar
 .load_program_next_block:
-  ld   b,0 
+  ld   b,0
   ld   c,0
 .load_program_loop:
   call getKey     ; get character
   jr   nz, .block_start
   inc  b
   ld   a,b
-  cp   255  ; loop in circles of 255  
+  cp   255  ; loop in circles of 255
   jr   nz,.load_program_loop
   ld   b,0
-  inc  c    
+  inc  c
   ld   a,c
   cp   255 ; loop 133*255 = 1s
   jr   nz,.load_program_loop
@@ -669,7 +668,7 @@ loadProgram:
 .block_start:
   cp   EOT   ; is it end of text
   jr   nz, .block_check_header     ; return if equal
-  ld   a,ACK 
+  ld   a,ACK
   call putSerialChar
   jr   .load_program_end
 .block_check_header:
@@ -687,18 +686,18 @@ loadProgram:
   push hl   ; save HL in case there is a retransmit so we car restart from the beginning
 .load_program_read_data: ; start reading the data
   call getKeyWait
-  ld   (hl),a         ; write data to memory 
+  ld   (hl),a         ; write data to memory
   inc  hl
   ; calc the checksum
   add  c ( a + c = char + current sum)
   ld   c,a ; move result back in b (current sum = new sum)
-  ; compare 
+  ; compare
   djnz .load_program_read_data ; did we read 128 bytes yet
 
   call getKeyWait ; get the checksum char
   cp   c  ; does checksum match?
   jr   nz, .error_send_nak ; TODO: uncomment
-  ld   a,ACK ; 
+  ld   a,ACK ;
   call putSerialChar
   inc  sp
   inc  sp ; get rid of hl
@@ -726,7 +725,7 @@ parseDecStr:
   push hl
   push bc
   push de
-  
+
   ld   b,(hl) ; count in hl
   ld   d,0
   ld   a,0
@@ -734,7 +733,7 @@ parseDecStr:
 .loop:
   sla  a  ; multiply by 10 as (d*8+d+d)
   sla  a
-  sla  a  
+  sla  a
   add  d
   add  d ; add the two more times
   ld   d,a ; store results in d
@@ -754,7 +753,7 @@ parseDecStr:
 ; parses a hex string(two values only)
 ; src str in bc
 ; result in a
-parseHexStr: 
+parseHexStr:
   push bc
   ;b is higher order nibble, c is lower order nibble
   ld   a,b
@@ -789,7 +788,7 @@ htb_to_next1:
   pop af
   sub '0'
   ret
-  
+
 printhex:
   push af
   srl  a
@@ -991,7 +990,7 @@ getKey:
   ; compare if buffer is empty
   ld   hl, (keyb_buf_wr)
   ld   de, (keyb_buf_rd) ; read pointer
-  ld   a,l 
+  ld   a,l
   cp   e                     ; is it equal then buffer is empty
   jr   z,.getKey_end
 .getKey_take:
